@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Cognitive Labyrinth</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Atmospheric Base Styles */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            color: #e2e8f0; /* Slate 200 */
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+        }
+
+        /* The Game Container */
+        #game-app {
+            width: 100%;
+            max-width: 800px;
+            min-height: 600px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid #334155;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), 0 0 10px rgba(56, 189, 248, 0.1);
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Focus Styles for Accessibility */
+        button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+            outline: 2px solid #38bdf8; /* Sky 400 */
+            outline-offset: 4px;
+        }
+
+        /* Animation Utilities */
+        .fade-in {
+            animation: fadeIn 0.8s ease-out forwards;
+            opacity: 0;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Pulse Animation for Scene 1 Narrative */
+        .pulse-text {
+            animation: textPulse 4s infinite ease-in-out;
+        }
+        @keyframes textPulse {
+            0%, 100% { color: #94a3b8; text-shadow: 0 0 0 transparent; }
+            50% { color: #e2e8f0; text-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+        }
+
+        /* Custom Scrollbar for content */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+
+        /* Custom Checkbox Styling */
+        .custom-checkbox input:checked + div {
+            background-color: #0c4a6e; /* Sky 900 */
+            border-color: #38bdf8; /* Sky 400 */
+        }
+        .custom-checkbox input:checked + div i {
+            opacity: 1;
+        }
+        
+        /* Range Input Styling */
+        input[type=range] {
+            -webkit-appearance: none; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-app" role="main" aria-live="polite">
+        <!-- Dynamic Content Area -->
+        <div id="scene-container" class="flex-grow flex flex-col items-center justify-center p-8 text-center w-full">
+            <!-- Content injects here -->
+        </div>
+    </div>
+
+    <!-- Hidden Debug Panel (Toggle with Alt+D) -->
+    <div id="debug-panel" class="fixed right-0 top-0 h-full w-96 bg-black/95 border-l border-slate-700 p-4 transform translate-x-full transition-transform duration-300 overflow-auto z-50 text-xs font-mono text-green-400">
+        <h3 class="border-b border-green-800 pb-2 mb-2 font-bold">STATE DEBUGGER</h3>
+        <pre id="debug-content"></pre>
+    </div>
+
+    <script>
+        /**
+         * ------------------------------------------------------------------
+         * CONFIGURATION & CONSTANTS
+         * ------------------------------------------------------------------
+         */
+        const STORAGE_KEY = 'cognitive_labyrinth_save_v1';
+        
+        // The precise schema provided (Updated with Scene 5 structures)
+        const SCHEMA_TEMPLATE = {
+            player: {
+                stressSignature: { body: null, mind: null, custom: null },
+                mbtiProfile: { interaction: null, information: null, decision: null, orientation: null },
+                stylePainPoints: { interaction: null, information: null, decision: null, orientation: null },
+                labyrinthClass: null,
+                insightTokens: 0,
+                fightFlightResponses: [],
+                burnout: { selected: [], touchpoint: null, completed: false },
+                compassionFatigue: { selected: [], touchpoint: null, completed: false }
+            },
+            signsOfStress: { physical: [], emotional: [], work: [] },
+            coreStressors: [],
+            leeScenario: {
+                reframeChoice: null,
+                examine: { control: [], influence: [], concern: [] },
+                strategiesChosen: [],
+                reflections: []
+            },
+            actionPlan: {
+                goal: null, lessenCauses: [], copeWithUncontrollable: [],
+                whatSuccessLooksLike: null, measurements: [], timeline: null,
+                assistanceNeeded: [], selfCare: []
+            },
+            systemFlags: {
+                hasReframeBonus: false,
+                completedScenes: [],
+                timestampStarted: null,
+                timestampCompleted: null,
+                currentScene: 'startMenu' 
+            }
+        };
+
+        const MBTI_CLASS_MAP = {
+            "INFJ": "The Guide",
+            "INTJ": "The Architect",
+            "INFP": "The Dreamsmith",
+            "INTP": "The Analyst",
+            "ENFP": "The Spark",
+            "ENFJ": "The Mentor",
+            "ENTP": "The Catalyst",
+            "ENTJ": "The Commander",
+            "ISFJ": "The Steward",
+            "ISTJ": "The Sentinel",
+            "ISFP": "The Artisan",
+            "ISTP": "The Explorer",
+            "ESFJ": "The Caretaker",
+            "ESTJ": "The Organizer",
+            "ESFP": "The Performer",
+            "ESTP": "The Adventurer"
+        };
+
+        /**
+         * ------------------------------------------------------------------
+         * GLOBAL STATE MANAGEMENT
+         * ------------------------------------------------------------------
+         */
+        let globalState = {};
+
+        function resetState() {
+            globalState = JSON.parse(JSON.stringify(SCHEMA_TEMPLATE));
+            globalState.systemFlags.timestampStarted = new Date().toISOString();
+            console.log("State Reset.");
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(globalState));
+                console.log("Game Saved.");
+            } catch (e) {
+                console.error("Save failed:", e);
+            }
+        }
+
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    globalState = JSON.parse(saved);
+                    // Ensure new fields exist if loading old save
+                    if(!globalState.player.fightFlightResponses) globalState.player.fightFlightResponses = [];
+                    if(!globalState.player.burnout) globalState.player.burnout = { selected: [], touchpoint: null, completed: false };
+                    if(!globalState.player.compassionFatigue) globalState.player.compassionFatigue = { selected: [], touchpoint: null, completed: false };
+                    if(!globalState.player.stylePainPoints) globalState.player.stylePainPoints = { interaction: null, information: null, decision: null, orientation: null };
+                    if(!globalState.leeScenario) globalState.leeScenario = { reframeChoice: null, examine: { control: [], influence: [], concern: [] }, strategiesChosen: [], reflections: [] };
+                    
+                    console.log("Game Loaded.");
+                    return true;
+                }
+            } catch (e) {
+                console.error("Load failed:", e);
+            }
+            return false;
+        }
+
+        function hasSavedGame() {
+            return localStorage.getItem(STORAGE_KEY) !== null;
+        }
+
+        /**
+         * ------------------------------------------------------------------
+         * ROUTING & ENGINE
+         * ------------------------------------------------------------------
+         */
+        
+        function goToScene(sceneName) {
+            const container = document.getElementById('scene-container');
+            
+            // 1. Save state before transition
+            if (sceneName !== 'startMenu') {
+                globalState.systemFlags.currentScene = sceneName;
+                saveState();
+            }
+
+            // 2. Clear Container
+            container.innerHTML = '';
+
+            // 3. Render Scene
+            if (sceneName === 'startMenu') {
+                renderStartMenu();
+            } else if (Scenes[sceneName]) {
+                const sceneHTML = Scenes[sceneName].render();
+                container.innerHTML = sceneHTML;
+                
+                if (Scenes[sceneName].init) {
+                    setTimeout(() => Scenes[sceneName].init(), 0);
+                }
+            } else {
+                container.innerHTML = `<p class="text-red-500">Error: Scene "${sceneName}" not found.</p>`;
+            }
+
+            // 4. Update Debugger
+            updateDebugPanel();
+        }
+
+        /**
+         * ------------------------------------------------------------------
+         * SCENE RENDERERS
+         * ------------------------------------------------------------------
+         */
+
+        function renderStartMenu() {
+            const container = document.getElementById('scene-container');
+            const canContinue = hasSavedGame();
+
+            container.innerHTML = `
+                <div class="fade-in max-w-lg w-full space-y-8">
+                    <div class="mb-10">
+                        <h1 class="text-4xl md:text-5xl font-bold text-sky-400 tracking-wider mb-2" style="text-shadow: 0 0 20px rgba(56,189,248,0.3)">
+                            THE COGNITIVE LABYRINTH
+                        </h1>
+                        <p class="text-slate-400 text-lg italic border-t border-slate-700 pt-4 mt-4 inline-block">
+                            Managing Stress… A Self‑Understanding
+                        </p>
+                    </div>
+
+                    <nav class="flex flex-col gap-4 items-center w-full" role="menu">
+                        <button onclick="handleNewGame()" 
+                            class="w-full max-w-xs py-4 px-6 bg-sky-900 hover:bg-sky-700 text-sky-100 font-semibold rounded shadow transition-all transform hover:scale-105 border border-sky-800 focus:ring-2 focus:ring-sky-400"
+                            aria-label="Start a new journey">
+                            Begin the Journey
+                        </button>
+
+                        <button onclick="handleContinueGame()" 
+                            ${!canContinue ? 'disabled' : ''}
+                            class="w-full max-w-xs py-4 px-6 bg-slate-800 text-slate-200 font-medium rounded shadow transition-all border border-slate-700 
+                            ${canContinue ? 'hover:bg-slate-700 hover:border-slate-500 transform hover:scale-105 focus:ring-2 focus:ring-slate-400' : 'opacity-50 cursor-not-allowed'}"
+                            aria-label="Continue previous journey">
+                            Continue Previous Journey
+                        </button>
+
+                        <div class="flex gap-4 w-full max-w-xs justify-center mt-4">
+                            <button onclick="showModal('accessibility')" class="text-sm text-slate-500 hover:text-sky-400 underline decoration-dotted underline-offset-4">
+                                Accessibility & Controls
+                            </button>
+                            <button onclick="showModal('about')" class="text-sm text-slate-500 hover:text-sky-400 underline decoration-dotted underline-offset-4">
+                                About
+                            </button>
+                        </div>
+                    </nav>
+                </div>
+            `;
+        }
+
+        function handleNewGame() {
+            if (hasSavedGame()) {
+                if (!confirm("Starting a new journey will erase your previous progress. Are you sure?")) return;
+            }
+            resetState();
+            goToScene('scene1'); 
+        }
+
+        function handleContinueGame() {
+            if (loadState()) {
+                const targetScene = globalState.systemFlags.currentScene === 'startMenu' 
+                    ? 'scene1' 
+                    : globalState.systemFlags.currentScene;
+                goToScene(targetScene);
+            }
+        }
+
+        function showModal(type) {
+            let content = "", title = "";
+            if (type === 'accessibility') {
+                title = "Accessibility & Controls";
+                content = `
+                    <ul class="list-disc text-left pl-6 space-y-2 text-slate-300">
+                        <li><strong>Keyboard:</strong> Use <kbd class="bg-slate-700 px-1 rounded">Tab</kbd> to navigate, <kbd class="bg-slate-700 px-1 rounded">Enter</kbd> to select.</li>
+                        <li><strong>Debug:</strong> Press <kbd class="bg-slate-700 px-1 rounded">Alt + D</kbd> to view state.</li>
+                    </ul>
+                `;
+            } else {
+                title = "About The Labyrinth";
+                content = `<p class="text-slate-300">Version 1.1.0 | Map of Returning (Ending) Added</p>`;
+            }
+            const modalHTML = `
+                <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 fade-in" onclick="this.remove()">
+                    <div class="bg-slate-800 p-8 rounded border border-slate-600 max-w-md w-full mx-4 shadow-2xl relative" onclick="event.stopPropagation()">
+                        <button onclick="this.parentElement.parentElement.remove()" class="absolute top-2 right-4 text-slate-500 hover:text-white text-xl">&times;</button>
+                        <h2 class="text-2xl font-bold text-sky-400 mb-4">${title}</h2>
+                        ${content}
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+        }
+
+        /**
+         * ------------------------------------------------------------------
+         * SCENE REGISTRY
+         * ------------------------------------------------------------------
+         */
+        const Scenes = {
+            'scene1': {
+                render: () => `
+                    <div id="s1-content" class="fade-in max-w-xl w-full text-left space-y-6">
+                        <div id="s1-intro" class="space-y-6">
+                            <p class="text-xl text-slate-300 leading-relaxed">You open your eyes in a dim corridor.</p>
+                            <p class="text-lg text-slate-400 leading-relaxed">The walls aren’t stone—they’re <span class="text-sky-300 font-semibold">thought</span>.</p>
+                            <p class="text-lg text-slate-400 leading-relaxed pulse-text">They pulse faintly with your heartbeat, shifting as you breathe.</p>
+                            <div class="bg-slate-800/50 p-4 border-l-2 border-sky-500 rounded"><p class="text-sm text-slate-300 italic">This is the Cognitive Labyrinth: a landscape shaped by your inner world under stress.</p></div>
+                            <div class="text-center pt-4"><button onclick="Scenes.scene1.nextStep('s1-intro', 's1-step1')" class="bg-sky-900 hover:bg-sky-700 text-white px-8 py-3 rounded shadow transition-all">Listen to the Walls <i class="fas fa-arrow-right ml-2"></i></button></div>
+                        </div>
+                        <div id="s1-step1" class="hidden space-y-6">
+                            <h2 class="text-2xl text-sky-400 font-bold mb-4">The Feeling</h2>
+                            <fieldset class="space-y-4">
+                                <legend class="text-lg text-slate-300 mb-4">In your body, stress feels most like…</legend>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    ${Scenes.scene1.makeOption('body', 'Pressure', 'Pressure')}
+                                    ${Scenes.scene1.makeOption('body', 'Static', 'Static')}
+                                    ${Scenes.scene1.makeOption('body', 'Fog', 'Fog')}
+                                    ${Scenes.scene1.makeOption('body', 'Fire', 'Fire')}
+                                    ${Scenes.scene1.makeOption('body', 'Vacuum', 'Vacuum')}
+                                </div>
+                            </fieldset>
+                        </div>
+                        <div id="s1-step2" class="hidden space-y-6">
+                            <h2 class="text-2xl text-sky-400 font-bold mb-4">The Sound</h2>
+                            <fieldset class="space-y-4">
+                                <legend class="text-lg text-slate-300 mb-4">In your mind, stress sounds most like…</legend>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    ${Scenes.scene1.makeOption('mind', 'Critical Voice', 'Critical voice')}
+                                    ${Scenes.scene1.makeOption('mind', 'Chaos', 'Chaos')}
+                                    ${Scenes.scene1.makeOption('mind', 'Silence', 'Silence')}
+                                    ${Scenes.scene1.makeOption('mind', 'Alarm', 'Alarm')}
+                                    ${Scenes.scene1.makeOption('mind', 'Echo', 'Echo')}
+                                </div>
+                            </fieldset>
+                        </div>
+                        <div id="s1-step3" class="hidden space-y-6">
+                            <h2 class="text-2xl text-sky-400 font-bold mb-4">The Shape</h2>
+                            <div class="space-y-4">
+                                <label for="custom-metaphor" class="block text-lg text-slate-300">(Optional) Is there another shape or metaphor that describes your stress?</label>
+                                <input type="text" id="custom-metaphor" class="w-full bg-slate-900 border border-slate-700 rounded p-4 text-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors" placeholder="e.g., A tightening knot, a rising tide..." onkeydown="if(event.key === 'Enter') Scenes.scene1.finishScene()">
+                                <div class="text-center pt-4"><button onclick="Scenes.scene1.finishScene()" class="bg-sky-900 hover:bg-sky-700 text-white px-8 py-3 rounded shadow transition-all">Absorb & Continue <i class="fas fa-check ml-2"></i></button></div>
+                            </div>
+                        </div>
+                        <div id="s1-outro" class="hidden space-y-8 text-center fade-in">
+                             <div class="text-6xl text-sky-500 mb-4 animate-pulse"><i class="fas fa-fingerprint"></i></div>
+                            <p class="text-xl text-slate-300 leading-relaxed">The walls shift, absorbing your answers. The Labyrinth now holds a trace of how stress lives in your body and mind.</p>
+                            <button onclick="Scenes.scene1.exit()" class="bg-green-700 hover:bg-green-600 text-white px-8 py-3 rounded shadow transition-all transform hover:scale-105">Step Forward</button>
+                        </div>
+                    </div>`,
+                makeOption: (type, label, value) => `<button onclick="Scenes.scene1.selectOption('${type}', '${value}', this)" class="option-btn text-left p-4 rounded border border-slate-700 hover:border-sky-500 hover:bg-slate-800 transition-all flex items-center justify-between group"><span class="text-slate-300 group-hover:text-white">${label}</span><i class="fas fa-chevron-right text-slate-600 group-hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity"></i></button>`,
+                init: () => {},
+                nextStep: (curr, next) => {
+                    document.getElementById(curr).classList.add('hidden');
+                    const n = document.getElementById(next);
+                    n.classList.remove('hidden'); n.classList.add('fade-in');
+                },
+                selectOption: (type, value) => {
+                    if (type === 'body') { globalState.player.stressSignature.body = value; Scenes.scene1.nextStep('s1-step1', 's1-step2'); }
+                    else if (type === 'mind') { globalState.player.stressSignature.mind = value; Scenes.scene1.nextStep('s1-step2', 's1-step3'); }
+                    saveState(); updateDebugPanel();
+                },
+                finishScene: () => {
+                    const c = document.getElementById('custom-metaphor').value;
+                    if (c && c.trim()) globalState.player.stressSignature.custom = c.trim();
+                    Scenes.scene1.nextStep('s1-step3', 's1-outro');
+                    if (!globalState.systemFlags.completedScenes.includes('scene1')) globalState.systemFlags.completedScenes.push('scene1');
+                    saveState(); updateDebugPanel();
+                },
+                exit: () => goToScene('scene2')
+            },
+
+            'scene2': {
+                data: {
+                    index: 0,
+                    perceivedCorrect: 0,
+                    vignettes: [
+                        { text: "You are giving a big presentation to a quiet audience.", type: "perceived" },
+                        { text: "You see your child’s messy room five minutes before guests arrive.", type: "perceived" },
+                        { text: "You are walking alone at night with fast footsteps gaining on you.", type: "actual" },
+                        { text: "An email arrives from your supervisor with the subject line: 'Need to talk.'", type: "perceived" }
+                    ]
+                },
+                render: () => `
+                    <div id="s2-container" class="fade-in max-w-xl w-full text-left space-y-6">
+                        <div id="s2-intro" class="space-y-6">
+                            <h2 class="text-3xl font-bold text-sky-400 mb-2">The Hall of Echoes</h2>
+                            <p class="text-xl text-slate-300 leading-relaxed">You step into a long corridor where footsteps echo too loudly.</p>
+                            <p class="text-lg text-slate-400 pulse-text">Shadows shift with your heartbeat.</p>
+                            <div class="bg-slate-800/50 p-4 border-l-2 border-sky-500 rounded"><p class="text-sm text-slate-300 italic">This is the Hall of Echoes, where your mind rehearses danger whether it’s real or imagined.</p></div>
+                            <div class="text-center pt-6"><button onclick="Scenes.scene2.startVignettes()" class="bg-sky-900 hover:bg-sky-700 text-white px-8 py-3 rounded shadow transition-all">Face the Echoes <i class="fas fa-volume-up ml-2"></i></button></div>
+                        </div>
+                        <div id="s2-vignette" class="hidden space-y-8">
+                            <div class="text-xs text-sky-500 font-mono tracking-widest text-center uppercase">Echo <span id="s2-counter">1</span> / 4</div>
+                            <div class="bg-slate-900 p-6 rounded-lg border border-slate-700 shadow-lg min-h-[120px] flex items-center justify-center"><p id="s2-prompt-text" class="text-xl text-white text-center font-medium"></p></div>
+                            <div class="grid grid-cols-1 gap-4">
+                                <p class="text-center text-slate-400 text-sm mb-2">What kind of threat is this?</p>
+                                <button onclick="Scenes.scene2.handleChoice('actual')" class="w-full p-4 bg-slate-800 hover:bg-red-900/40 border border-slate-600 hover:border-red-500 rounded text-slate-200 hover:text-white transition-all text-left flex justify-between group"><span>Actual Threat (Physical Danger)</span><i class="fas fa-exclamation-circle opacity-0 group-hover:opacity-100 text-red-400"></i></button>
+                                <button onclick="Scenes.scene2.handleChoice('perceived')" class="w-full p-4 bg-slate-800 hover:bg-yellow-900/40 border border-slate-600 hover:border-yellow-500 rounded text-slate-200 hover:text-white transition-all text-left flex justify-between group"><span>Perceived Threat (Psychological/Ego)</span><i class="fas fa-brain opacity-0 group-hover:opacity-100 text-yellow-400"></i></button>
+                                <button onclick="Scenes.scene2.handleChoice('neutral')" class="w-full p-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 rounded text-slate-200 hover:text-white transition-all text-left flex justify-between group"><span>Neutral Situation</span><i class="fas fa-minus-circle opacity-0 group-hover:opacity-100 text-slate-400"></i></button>
+                            </div>
+                        </div>
+                        <div id="s2-outro" class="hidden space-y-8 text-center fade-in">
+                            <div id="s2-result-icon" class="text-6xl mb-4 animate-pulse"></div>
+                            <h3 id="s2-result-title" class="text-2xl font-bold text-white mb-2"></h3>
+                            <p id="s2-result-text" class="text-lg text-slate-300 leading-relaxed max-w-md mx-auto"></p>
+                            <div class="pt-6"><button onclick="Scenes.scene2.exit()" class="bg-green-700 hover:bg-green-600 text-white px-8 py-3 rounded shadow transition-all transform hover:scale-105">Continue Deeper</button></div>
+                        </div>
+                    </div>`,
+                init: () => { Scenes.scene2.data.index = 0; Scenes.scene2.data.perceivedCorrect = 0; },
+                startVignettes: () => { document.getElementById('s2-intro').classList.add('hidden'); const vDiv = document.getElementById('s2-vignette'); vDiv.classList.remove('hidden'); vDiv.classList.add('fade-in'); Scenes.scene2.renderCurrentVignette(); },
+                renderCurrentVignette: () => { const data = Scenes.scene2.data; const v = data.vignettes[data.index]; document.getElementById('s2-counter').innerText = data.index + 1; const promptEl = document.getElementById('s2-prompt-text'); promptEl.style.opacity = 0; setTimeout(() => { promptEl.innerText = v.text; promptEl.style.opacity = 1; }, 200); },
+                handleChoice: (choice) => { const data = Scenes.scene2.data; const currentVignette = data.vignettes[data.index]; const record = { scenario: currentVignette.text.substring(0, 20) + "...", userChoice: choice, correctType: currentVignette.type, timestamp: new Date().toISOString() }; globalState.player.fightFlightResponses.push(record); if (currentVignette.type === 'perceived' && choice === 'perceived') { data.perceivedCorrect++; } data.index++; if (data.index < data.vignettes.length) { Scenes.scene2.renderCurrentVignette(); } else { Scenes.scene2.finishScene(); } saveState(); },
+                finishScene: () => { document.getElementById('s2-vignette').classList.add('hidden'); const outro = document.getElementById('s2-outro'); outro.classList.remove('hidden'); outro.classList.add('fade-in'); const icon = document.getElementById('s2-result-icon'); const title = document.getElementById('s2-result-title'); const text = document.getElementById('s2-result-text'); if (!globalState.systemFlags.completedScenes.includes('scene2')) { globalState.systemFlags.completedScenes.push('scene2'); } if (Scenes.scene2.data.perceivedCorrect >= 2) { globalState.systemFlags.hasReframeBonus = true; icon.innerHTML = '<i class="fas fa-lightbulb text-yellow-400"></i>'; title.innerText = "Reframe Bonus Unlocked"; text.innerText = "A hidden passage glows faintly. You have learned to distinguish the noise of anxiety from the signal of danger."; } else { icon.innerHTML = '<i class="fas fa-road text-slate-500"></i>'; title.innerText = "The Echoes Fade"; text.innerText = "The noise settles. You sense there’s more to learn about your own reactions — and that’s okay."; } saveState(); updateDebugPanel(); },
+                exit: () => { goToScene('scene3'); }
+            },
+
+            'scene3': {
+                render: () => `
+                    <div id="s3-container" class="fade-in max-w-4xl w-full text-left space-y-6">
+                        <div id="s3-hub" class="text-center space-y-10">
+                            <div><h2 class="text-3xl font-bold text-sky-400 mb-2">The Twin Vaults</h2><p class="text-slate-400">Two heavy doors stand before you. You must enter and seal both to proceed.</p></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                                <button id="btn-vault-burnout" onclick="Scenes.scene3.openVault('burnout')" class="relative group p-8 rounded-lg border-2 bg-slate-800 transition-all hover:-translate-y-1 shadow-lg text-left overflow-hidden"><div class="absolute inset-0 bg-gradient-to-br from-orange-900/20 to-transparent opacity-50"></div><i class="fas fa-fire-extinguisher text-4xl mb-4 text-orange-400 group-hover:scale-110 transition-transform block"></i><h3 class="text-xl font-bold text-slate-200 mb-2">The Iron Vault</h3><p class="text-sm text-slate-400">Burnout & Exhaustion</p><div id="status-burnout" class="absolute top-4 right-4 text-green-400 hidden"><i class="fas fa-check-circle text-xl"></i></div></button>
+                                <button id="btn-vault-compassion" onclick="Scenes.scene3.openVault('compassion')" class="relative group p-8 rounded-lg border-2 bg-slate-800 transition-all hover:-translate-y-1 shadow-lg text-left overflow-hidden"><div class="absolute inset-0 bg-gradient-to-br from-teal-900/20 to-transparent opacity-50"></div><i class="fas fa-hand-holding-heart text-4xl mb-4 text-teal-400 group-hover:scale-110 transition-transform block"></i><h3 class="text-xl font-bold text-slate-200 mb-2">The Mirrored Vault</h3><p class="text-sm text-slate-400">Compassion Fatigue</p><div id="status-compassion" class="absolute top-4 right-4 text-green-400 hidden"><i class="fas fa-check-circle text-xl"></i></div></button>
+                            </div>
+                            <div id="s3-completion-msg" class="hidden fade-in space-y-6 pt-6 border-t border-slate-800 mt-8"><p class="text-xl text-slate-300">Burnout and Compassion Fatigue are different, but they can coexist.</p><p class="text-lg text-sky-200">They are signals, not judgments.</p><button onclick="Scenes.scene3.finishScene()" class="bg-green-700 hover:bg-green-600 text-white px-10 py-3 rounded shadow-lg transition-all transform hover:scale-105 font-bold">Continue Deeper</button></div>
+                        </div>
+                        <div id="vault-burnout" class="hidden max-w-xl mx-auto space-y-6">
+                            <div class="border-b border-orange-900/50 pb-4 mb-4"><h3 class="text-2xl font-bold text-orange-400"><i class="fas fa-door-open mr-2"></i>Vault of Burnout</h3></div><p class="text-slate-300">You push open the iron door. The air is thick and heavy. This is the exhaustion of the long haul.</p>
+                            <form id="form-burnout" onsubmit="event.preventDefault(); Scenes.scene3.sealVault('burnout');"><fieldset class="space-y-3 mb-6"><legend class="text-sm uppercase tracking-widest text-slate-500 mb-2">Identify Traces</legend>${Scenes.scene3.makeCheckbox('b-sym-1', 'Exhaustion')}${Scenes.scene3.makeCheckbox('b-sym-2', 'Alienation from work-related activities')}${Scenes.scene3.makeCheckbox('b-sym-3', 'Reduced performance')}</fieldset><label class="block mb-2 text-slate-300">Which feels closest to your experience?</label><textarea id="b-reflection" class="w-full bg-slate-900 border border-slate-700 rounded p-3 text-slate-200 focus:border-orange-500 min-h-[80px]" placeholder="Reflect here..."></textarea><div class="flex gap-4 mt-6"><button type="button" onclick="Scenes.scene3.returnToHub()" class="px-4 py-2 text-slate-400 hover:text-white">Cancel</button><button type="submit" class="flex-grow bg-orange-800 hover:bg-orange-700 text-white py-3 rounded shadow font-bold">Seal Vault & Gain Insight</button></div></form>
+                        </div>
+                        <div id="vault-compassion" class="hidden max-w-xl mx-auto space-y-6">
+                            <div class="border-b border-teal-900/50 pb-4 mb-4"><h3 class="text-2xl font-bold text-teal-400"><i class="fas fa-door-open mr-2"></i>Vault of Compassion Fatigue</h3></div><p class="text-slate-300">The mirrored vault ripples with shifting reflections. This is the strain of exposure to others’ suffering.</p>
+                            <form id="form-compassion" onsubmit="event.preventDefault(); Scenes.scene3.sealVault('compassion');"><fieldset class="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2 custom-scrollbar"><legend class="text-sm uppercase tracking-widest text-slate-500 mb-2">Identify Traces</legend>${Scenes.scene3.makeCheckbox('c-sym-1', 'Feelings of failure, guilt, or self-doubt')}${Scenes.scene3.makeCheckbox('c-sym-2', 'Sadness or powerlessness')}${Scenes.scene3.makeCheckbox('c-sym-3', 'Loss of sleep')}${Scenes.scene3.makeCheckbox('c-sym-4', 'Reduced sense of efficacy')}${Scenes.scene3.makeCheckbox('c-sym-5', 'Difficulty concentrating')}${Scenes.scene3.makeCheckbox('c-sym-6', 'Feeling overwhelmed by obligations')}${Scenes.scene3.makeCheckbox('c-sym-7', 'Pessimism')}${Scenes.scene3.makeCheckbox('c-sym-8', 'Apathy or emotional numbness')}${Scenes.scene3.makeCheckbox('c-sym-9', 'Secretive addictions or self-medicating')}${Scenes.scene3.makeCheckbox('c-sym-10', 'Isolation or withdrawal')}${Scenes.scene3.makeCheckbox('c-sym-11', 'Exhaustion')}${Scenes.scene3.makeCheckbox('c-sym-12', 'Bottled-up emotions')}</fieldset><label class="block mb-2 text-slate-300">What stands out most?</label><textarea id="c-reflection" class="w-full bg-slate-900 border border-slate-700 rounded p-3 text-slate-200 focus:border-teal-500 min-h-[80px]" placeholder="Reflect here..."></textarea><div class="flex gap-4 mt-6"><button type="button" onclick="Scenes.scene3.returnToHub()" class="px-4 py-2 text-slate-400 hover:text-white">Cancel</button><button type="submit" class="flex-grow bg-teal-800 hover:bg-teal-700 text-white py-3 rounded shadow font-bold">Seal Vault & Gain Insight</button></div></form>
+                        </div>
+                    </div>
+                `,
+                makeCheckbox: (id, label) => `<label class="custom-checkbox flex items-start gap-3 cursor-pointer group"><input type="checkbox" value="${label}" class="peer sr-only"><div class="w-5 h-5 mt-1 border border-slate-500 rounded flex items-center justify-center transition-all bg-slate-900 peer-focus:ring-2 peer-focus:ring-sky-400"><i class="fas fa-check text-xs text-white opacity-0 transition-opacity"></i></div><span class="text-slate-300 group-hover:text-white transition-colors text-sm">${label}</span></label>`,
+                init: () => { Scenes.scene3.checkCompletion(); },
+                openVault: (type) => { if (globalState.player[type === 'burnout' ? 'burnout' : 'compassionFatigue'].completed) {} document.getElementById('s3-hub').classList.add('hidden'); const v = document.getElementById(`vault-${type}`); v.classList.remove('hidden'); v.classList.add('fade-in'); v.querySelector('textarea').focus(); },
+                returnToHub: () => { document.getElementById('vault-burnout').classList.add('hidden'); document.getElementById('vault-compassion').classList.add('hidden'); document.getElementById('s3-hub').classList.remove('hidden'); document.getElementById('s3-hub').classList.add('fade-in'); Scenes.scene3.checkCompletion(); },
+                sealVault: (type) => { const container = document.getElementById(`form-${type}`); const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked'); const reflection = type === 'burnout' ? document.getElementById('b-reflection').value : document.getElementById('c-reflection').value; const selected = Array.from(checkboxes).map(cb => cb.value); if (type === 'burnout') { globalState.player.burnout.selected = selected; globalState.player.burnout.touchpoint = reflection; if (!globalState.player.burnout.completed) { globalState.player.burnout.completed = true; globalState.player.insightTokens += 1; } } else { globalState.player.compassionFatigue.selected = selected; globalState.player.compassionFatigue.touchpoint = reflection; if (!globalState.player.compassionFatigue.completed) { globalState.player.compassionFatigue.completed = true; globalState.player.insightTokens += 1; } } saveState(); updateDebugPanel(); Scenes.scene3.returnToHub(); },
+                checkCompletion: () => { const bDone = globalState.player.burnout.completed; const cDone = globalState.player.compassionFatigue.completed; const btnB = document.getElementById('btn-vault-burnout'); const btnC = document.getElementById('btn-vault-compassion'); if (bDone) { btnB.classList.add('border-green-500/50', 'opacity-75'); btnB.classList.remove('border-2'); btnB.classList.add('border'); document.getElementById('status-burnout').classList.remove('hidden'); } else { btnB.classList.add('border-orange-500/30'); } if (cDone) { btnC.classList.add('border-green-500/50', 'opacity-75'); btnC.classList.remove('border-2'); btnC.classList.add('border'); document.getElementById('status-compassion').classList.remove('hidden'); } else { btnC.classList.add('border-teal-500/30'); } if (bDone && cDone) { document.getElementById('s3-completion-msg').classList.remove('hidden'); } },
+                finishScene: () => { if (!globalState.systemFlags.completedScenes.includes('scene3')) { globalState.systemFlags.completedScenes.push('scene3'); } saveState(); goToScene('scene4'); }
+            },
+
+            'scene4': {
+                data: {
+                    activePath: null,
+                    qIndex: 0,
+                    score: { optionA: 0, optionB: 0 },
+                    paths: {
+                        'interaction': {
+                            title: "Path of Interaction",
+                            labelA: "E", labelB: "I",
+                            icon: "fa-users",
+                            color: "text-rose-400",
+                            completed: false,
+                            questions: [
+                                { a: "I recharge by being around people.", b: "I recharge by spending time alone." },
+                                { a: "I focus on the external world of action.", b: "I focus on the internal world of ideas." },
+                                { a: "I tend to think while I speak.", b: "I tend to think before I speak." },
+                                { a: "I prefer a wide circle of acquaintances.", b: "I prefer a few deep friendships." },
+                                { a: "I learn best by doing and discussing.", b: "I learn best by reflecting and observing." }
+                            ]
+                        },
+                        'information': {
+                            title: "Path of Information",
+                            labelA: "S", labelB: "N",
+                            icon: "fa-tree",
+                            color: "text-emerald-400",
+                            completed: false,
+                            questions: [
+                                { a: "I trust concrete facts and experience.", b: "I trust instincts and abstract theories." },
+                                { a: "I focus on the present reality.", b: "I focus on future possibilities." },
+                                { a: "I prefer step-by-step instructions.", b: "I prefer the big picture overview." },
+                                { a: "I am described as practical and realistic.", b: "I am described as imaginative and creative." },
+                                { a: "I see things as they are.", b: "I see things as they could be." }
+                            ]
+                        },
+                        'decision': {
+                            title: "Path of Decision",
+                            labelA: "T", labelB: "F",
+                            icon: "fa-balance-scale",
+                            color: "text-blue-400",
+                            completed: false,
+                            questions: [
+                                { a: "I value logic and objectivity.", b: "I value harmony and empathy." },
+                                { a: "I prioritize truth over tact.", b: "I prioritize tact over truth." },
+                                { a: "I make decisions with my head.", b: "I make decisions with my heart." },
+                                { a: "I am more convinced by rational arguments.", b: "I am more convinced by emotional appeals." },
+                                { a: "I strive for justice and fairness.", b: "I strive for mercy and compassion." }
+                            ]
+                        },
+                        'orientation': {
+                            title: "Path of Orientation",
+                            labelA: "J", labelB: "P",
+                            icon: "fa-compass",
+                            color: "text-purple-400",
+                            completed: false,
+                            questions: [
+                                { a: "I prefer to have a plan and stick to it.", b: "I prefer to stay flexible and spontaneous." },
+                                { a: "I work first, play later.", b: "I mix work and play." },
+                                { a: "I like closure and having things decided.", b: "I like keeping my options open." },
+                                { a: "I tend to finish tasks well before deadlines.", b: "I tend to work in bursts near the deadline." },
+                                { a: "I enjoy structure and lists.", b: "I find structure confining." }
+                            ]
+                        }
+                    }
+                },
+                render: () => `
+                    <div id="s4-container" class="fade-in max-w-4xl w-full text-left space-y-6">
+                        <div id="s4-hub" class="text-center space-y-8">
+                            <div><h2 class="text-3xl font-bold text-sky-400 mb-2">The Chamber of Four Paths</h2><p class="text-slate-400">To map your labyrinth, you must walk four distinct paths. <br>Each reveals a pillar of your cognitive architecture.</p></div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto">${Scenes.scene4.renderPathBtn('interaction')}${Scenes.scene4.renderPathBtn('information')}${Scenes.scene4.renderPathBtn('decision')}${Scenes.scene4.renderPathBtn('orientation')}</div>
+                            <div id="s4-completion-area" class="hidden fade-in space-y-6 pt-8 border-t border-slate-800 mt-8"><p class="text-slate-300">The paths have converged.</p><button onclick="Scenes.scene4.revealClass()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-10 py-4 rounded shadow-lg transition-all transform hover:scale-105 font-bold text-lg"><i class="fas fa-scroll mr-2"></i> Reveal Labyrinth Class</button></div>
+                        </div>
+                        <div id="s4-quiz" class="hidden max-w-xl mx-auto bg-slate-900 p-8 rounded border border-slate-700 shadow-2xl relative">
+                            <div class="text-center mb-8"><h3 id="quiz-title" class="text-2xl font-bold text-white mb-1">Path Title</h3><p class="text-xs text-slate-500 uppercase tracking-widest">Question <span id="quiz-progress">1</span> of 5</p></div>
+                            <div id="quiz-options" class="space-y-4"><!-- Dynamic Options --></div>
+                        </div>
+                        <div id="s4-reveal" class="hidden text-center space-y-6 fade-in">
+                            <div class="mb-6"><i class="fas fa-crown text-6xl text-yellow-500 animate-pulse"></i></div><h2 class="text-4xl font-bold text-white">You are <span id="reveal-class-name" class="text-sky-400">The Unknown</span></h2><p class="text-xl text-slate-400 font-mono tracking-widest" id="reveal-mbti">XXXX</p><p class="text-slate-300 max-w-md mx-auto leading-relaxed">Your cognitive architecture has been mapped. This archetype will guide how you navigate the rest of the labyrinth.</p><button onclick="Scenes.scene4.exit()" class="mt-8 bg-green-700 hover:bg-green-600 text-white px-8 py-3 rounded shadow font-bold">Proceed to Scene 5</button>
+                        </div>
+                    </div>
+                `,
+                renderPathBtn: (key) => { const path = Scenes.scene4.data.paths[key]; const isDone = globalState.player.mbtiProfile[key] !== null; const statusClass = isDone ? "border-green-500/50 opacity-60 cursor-default" : "border-slate-700 hover:border-sky-500 hover:bg-slate-800 cursor-pointer"; const iconColor = isDone ? "text-green-400" : path.color; return `<button id="btn-path-${key}" onclick="Scenes.scene4.startPath('${key}')" ${isDone ? 'disabled' : ''} class="p-6 rounded border-2 ${statusClass} transition-all text-left flex items-center gap-4 group relative overflow-hidden"><div class="text-2xl w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center ${iconColor}"><i class="fas ${path.icon}"></i></div><div><h4 class="font-bold text-slate-200">${path.title}</h4><p class="text-xs text-slate-500">${isDone ? 'Completed' : 'Begin Path'}</p></div>${isDone ? '<div class="absolute right-4 top-1/2 -translate-y-1/2 text-green-500"><i class="fas fa-check-circle"></i></div>' : ''}</button>`; },
+                init: () => { Scenes.scene4.checkHubStatus(); },
+                startPath: (key) => { if (globalState.player.mbtiProfile[key] !== null) return; Scenes.scene4.data.activePath = key; Scenes.scene4.data.qIndex = 0; Scenes.scene4.data.score = { optionA: 0, optionB: 0 }; document.getElementById('s4-hub').classList.add('hidden'); document.getElementById('s4-quiz').classList.remove('hidden'); document.getElementById('s4-quiz').classList.add('fade-in'); Scenes.scene4.renderQuestion(); },
+                renderQuestion: () => { const key = Scenes.scene4.data.activePath; const index = Scenes.scene4.data.qIndex; const pathData = Scenes.scene4.data.paths[key]; const q = pathData.questions[index]; document.getElementById('quiz-title').innerText = pathData.title; document.getElementById('quiz-title').className = `text-2xl font-bold mb-1 ${pathData.color}`; document.getElementById('quiz-progress').innerText = index + 1; const container = document.getElementById('quiz-options'); container.innerHTML = `<button onclick="Scenes.scene4.handleAnswer('A')" class="w-full p-4 rounded bg-slate-800 border border-slate-600 hover:border-sky-400 hover:bg-slate-700 text-left transition-all group"><span class="font-bold text-sky-500 mr-2">A.</span> <span class="text-slate-200 group-hover:text-white">${q.a}</span></button><button onclick="Scenes.scene4.handleAnswer('B')" class="w-full p-4 rounded bg-slate-800 border border-slate-600 hover:border-sky-400 hover:bg-slate-700 text-left transition-all group"><span class="font-bold text-sky-500 mr-2">B.</span> <span class="text-slate-200 group-hover:text-white">${q.b}</span></button>`; },
+                handleAnswer: (choice) => { if (choice === 'A') Scenes.scene4.data.score.optionA++; else Scenes.scene4.data.score.optionB++; Scenes.scene4.data.qIndex++; const key = Scenes.scene4.data.activePath; const pathData = Scenes.scene4.data.paths[key]; if (Scenes.scene4.data.qIndex < pathData.questions.length) { Scenes.scene4.renderQuestion(); } else { Scenes.scene4.finishPath(); } },
+                finishPath: () => { const key = Scenes.scene4.data.activePath; const score = Scenes.scene4.data.score; const pathData = Scenes.scene4.data.paths[key]; const result = score.optionA >= score.optionB ? pathData.labelA : pathData.labelB; globalState.player.mbtiProfile[key] = result; globalState.player.insightTokens += 1; saveState(); updateDebugPanel(); document.getElementById('s4-quiz').classList.add('hidden'); document.getElementById('s4-hub').classList.remove('hidden'); const hubGrid = document.querySelector('#s4-hub .grid'); hubGrid.innerHTML = `${Scenes.scene4.renderPathBtn('interaction')}${Scenes.scene4.renderPathBtn('information')}${Scenes.scene4.renderPathBtn('decision')}${Scenes.scene4.renderPathBtn('orientation')}`; Scenes.scene4.checkHubStatus(); },
+                checkHubStatus: () => { const p = globalState.player.mbtiProfile; if (p.interaction && p.information && p.decision && p.orientation) { document.getElementById('s4-completion-area').classList.remove('hidden'); } },
+                revealClass: () => { const p = globalState.player.mbtiProfile; const typeCode = `${p.interaction}${p.information}${p.decision}${p.orientation}`; const className = MBTI_CLASS_MAP[typeCode] || "The Wanderer"; globalState.player.labyrinthClass = className; if (!globalState.systemFlags.completedScenes.includes('scene4')) { globalState.systemFlags.completedScenes.push('scene4'); } saveState(); updateDebugPanel(); document.getElementById('s4-hub').classList.add('hidden'); const revealEl = document.getElementById('s4-reveal'); revealEl.classList.remove('hidden'); document.getElementById('reveal-class-name').innerText = className; document.getElementById('reveal-mbti').innerText = typeCode; },
+                exit: () => { goToScene('scene5'); }
+            },
+
+            'scene5': {
+                data: {
+                    activeDimension: null,
+                    reflections: {
+                        'E': {
+                            title: "The Extravert Mirror",
+                            stressedBy: ["Isolation or silence", "Lack of external stimulation", "Having to listen without talking", "Inactivity or slow pace"],
+                            stressesOthersBy: ["Interrupting or talking over others", "Overwhelming them with words", "Demanding immediate feedback", "Acting without thinking"]
+                        },
+                        'I': {
+                            title: "The Introvert Mirror",
+                            stressedBy: ["Noise and interruptions", "Lack of privacy", "Forced socialization", "Being put on the spot"],
+                            stressesOthersBy: ["Withdrawing abruptly", "Not sharing enough information", "Appearing aloof or judgmental", "Withholding feedback"]
+                        },
+                        'S': {
+                            title: "The Sensing Mirror",
+                            stressedBy: ["Ambiguity or lack of instructions", "Abstract theories without application", "Radical or sudden change", "Disorder in physical environment"],
+                            stressesOthersBy: ["Nitpicking details", "Resisting new ideas", "Missing the big picture", "Insisting on 'the way it's always been done'"]
+                        },
+                        'N': {
+                            title: "The Intuitive Mirror",
+                            stressedBy: ["Strict routine and repetition", "Detailed administrative work", "Rigid rules without purpose", "Focusing only on the present"],
+                            stressesOthersBy: ["Overcomplicating simple tasks", "Ignoring practical realities", "Being vague or jumping topics", "Impracticality"]
+                        },
+                        'T': {
+                            title: "The Thinking Mirror",
+                            stressedBy: ["Emotional outbursts in others", "Illogical inefficiency", "Incompetence", "Having to 'sugarcoat' truth"],
+                            stressesOthersBy: ["Being critical or blunt", "Ignoring others' feelings", "Prioritizing logic over people", "Appearing arrogant or cold"]
+                        },
+                        'F': {
+                            title: "The Feeling Mirror",
+                            stressedBy: ["Conflict and disharmony", "Criticism or lack of appreciation", "Violation of personal values", "Cold, impersonal logic"],
+                            stressesOthersBy: ["Taking things too personally", "Avoiding necessary conflict", "Being passive-aggressive", "Playing the martyr"]
+                        },
+                        'J': {
+                            title: "The Judging Mirror",
+                            stressedBy: ["Unexpected changes", "Disorder and chaos", "Lateness", "Indecision or open-endedness"],
+                            stressesOthersBy: ["Being rigid or controlling", "Rushing to closure too soon", "Not listening to new information", "Imposing deadlines on others"]
+                        },
+                        'P': {
+                            title: "The Perceiving Mirror",
+                            stressedBy: ["Strict schedules", "Micromanagement", "Routine", "Having to decide before ready"],
+                            stressesOthersBy: ["Being disorganized or late", "Missing deadlines", "Indecisiveness", "Creating last-minute crises"]
+                        }
+                    }
+                },
+                render: () => `
+                    <div id="s5-container" class="fade-in max-w-4xl w-full text-left space-y-6">
+                        <div id="s5-hub" class="text-center space-y-8">
+                            <div><h2 class="text-3xl font-bold text-sky-400 mb-2">The Gallery of Reflections</h2><p class="text-slate-400">Four covered mirrors stand before you. Unveil them to understand the shadow of your strengths.</p></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">${Scenes.scene5.renderMirrorBtn('interaction')}${Scenes.scene5.renderMirrorBtn('information')}${Scenes.scene5.renderMirrorBtn('decision')}${Scenes.scene5.renderMirrorBtn('orientation')}</div>
+                            <div id="s5-completion-area" class="hidden fade-in space-y-6 pt-8 border-t border-slate-800 mt-8"><p class="text-xl text-slate-300">You have faced your reflections.</p><button onclick="Scenes.scene5.finishScene()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-10 py-4 rounded shadow-lg transition-all transform hover:scale-105 font-bold text-lg">Step Through the Looking Glass</button></div>
+                        </div>
+                        <div id="s5-reflection" class="hidden max-w-2xl mx-auto bg-slate-900 border border-slate-700 rounded shadow-2xl overflow-hidden relative">
+                            <div class="p-8 space-y-6">
+                                <div class="flex justify-between items-start"><h3 id="mirror-title" class="text-2xl font-bold text-sky-400">The Mirror</h3><button onclick="Scenes.scene5.returnToHub()" class="text-slate-500 hover:text-white"><i class="fas fa-times"></i></button></div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-8"><div class="bg-slate-800/50 p-4 rounded border-l-2 border-red-500"><h4 class="font-bold text-slate-200 mb-2"><i class="fas fa-bolt mr-2 text-red-400"></i>Stressed By</h4><ul id="list-stressed-by" class="list-disc pl-5 text-sm text-slate-400 space-y-1"></ul></div><div class="bg-slate-800/50 p-4 rounded border-l-2 border-yellow-500"><h4 class="font-bold text-slate-200 mb-2"><i class="fas fa-exclamation-triangle mr-2 text-yellow-400"></i>Stresses Others By</h4><ul id="list-stresses-others" class="list-disc pl-5 text-sm text-slate-400 space-y-1"></ul></div></div>
+                                <div class="pt-6 border-t border-slate-800"><p class="text-lg text-white mb-4">Looking at this reflection, what feels most painful or challenging for you right now?</p><div class="grid grid-cols-1 gap-3"><button onclick="Scenes.scene5.handleSelection('Self-stress')" class="p-3 bg-slate-800 hover:bg-sky-900/50 border border-slate-700 hover:border-sky-500 rounded text-left transition-all">How this part of me gets stressed</button><button onclick="Scenes.scene5.handleSelection('Stressing others')" class="p-3 bg-slate-800 hover:bg-sky-900/50 border border-slate-700 hover:border-sky-500 rounded text-left transition-all">How this part of me might stress others</button><button onclick="Scenes.scene5.handleSelection('Both')" class="p-3 bg-slate-800 hover:bg-sky-900/50 border border-slate-700 hover:border-sky-500 rounded text-left transition-all">Both feel painful</button><button onclick="Scenes.scene5.handleSelection('Neither')" class="p-3 bg-slate-800 hover:bg-sky-900/50 border border-slate-700 hover:border-sky-500 rounded text-left transition-all">Neither feels very strong right now</button></div></div>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                renderMirrorBtn: (dimension) => { const isDone = globalState.player.stylePainPoints[dimension] !== null; const statusClass = isDone ? "border-green-500/50 opacity-60 bg-slate-800" : "border-slate-700 bg-slate-800 hover:border-sky-500 hover:shadow-[0_0_15px_rgba(56,189,248,0.2)] cursor-pointer group"; const trait = globalState.player.mbtiProfile[dimension] || 'E'; const title = Scenes.scene5.data.reflections[trait].title; return `<div onclick="${isDone ? '' : `Scenes.scene5.openMirror('${dimension}')`}" class="p-8 rounded-lg border-2 ${statusClass} transition-all relative overflow-hidden text-center min-h-[160px] flex flex-col items-center justify-center">${!isDone ? `<div class="absolute inset-0 bg-slate-900 z-10 flex flex-col items-center justify-center transition-opacity group-hover:opacity-10"><i class="fas fa-question text-4xl text-slate-600 mb-2"></i><span class="text-slate-500 uppercase tracking-widest text-sm">Covered Mirror</span></div>` : ''}<i class="fas fa-user-circle text-4xl mb-3 text-sky-400"></i><h3 class="text-xl font-bold text-slate-200">${title}</h3>${isDone ? '<div class="absolute top-2 right-2 text-green-500"><i class="fas fa-check-circle"></i></div>' : ''}</div>`; },
+                init: () => { Scenes.scene5.checkCompletion(); },
+                openMirror: (dimension) => { Scenes.scene5.data.activeDimension = dimension; const trait = globalState.player.mbtiProfile[dimension] || 'E'; const content = Scenes.scene5.data.reflections[trait]; document.getElementById('mirror-title').innerText = content.title; const listStressed = document.getElementById('list-stressed-by'); listStressed.innerHTML = content.stressedBy.map(i => `<li>${i}</li>`).join(''); const listOthers = document.getElementById('list-stresses-others'); listOthers.innerHTML = content.stressesOthersBy.map(i => `<li>${i}</li>`).join(''); document.getElementById('s5-hub').classList.add('hidden'); const reflectionEl = document.getElementById('s5-reflection'); reflectionEl.classList.remove('hidden'); reflectionEl.classList.add('fade-in'); },
+                handleSelection: (choice) => { const dimension = Scenes.scene5.data.activeDimension; globalState.player.stylePainPoints[dimension] = choice; globalState.player.insightTokens += 1; saveState(); updateDebugPanel(); Scenes.scene5.returnToHub(); },
+                returnToHub: () => { document.getElementById('s5-reflection').classList.add('hidden'); document.getElementById('s5-hub').classList.remove('hidden'); const grid = document.querySelector('#s5-hub .grid'); grid.innerHTML = `${Scenes.scene5.renderMirrorBtn('interaction')}${Scenes.scene5.renderMirrorBtn('information')}${Scenes.scene5.renderMirrorBtn('decision')}${Scenes.scene5.renderMirrorBtn('orientation')}`; Scenes.scene5.checkCompletion(); },
+                checkCompletion: () => { const p = globalState.player.stylePainPoints; if (p.interaction && p.information && p.decision && p.orientation) { document.getElementById('s5-completion-area').classList.remove('hidden'); } },
+                finishScene: () => { if (!globalState.systemFlags.completedScenes.includes('scene5')) { globalState.systemFlags.completedScenes.push('scene5'); } saveState(); goToScene('scene6'); }
+            },
+
+            'scene6': {
+                data: {
+                    activeChamber: null,
+                    chambers: {
+                        'physical': {
+                            title: "The Body Forge",
+                            icon: "fa-heart-pulse",
+                            color: "text-rose-500",
+                            narrative: "A warm chamber hums like a heartbeat. This is the Body Forge, where physical signs of stress appear.",
+                            options: ["Illness or weakened immune system", "Tiredness or disrupted sleep", "Upset stomach, chest pain, or rapid heartbeat", "Loss of energy", "Aches, pains, or muscle tension", "Irregular eating patterns", "Headaches or dizziness"]
+                        },
+                        'emotional': {
+                            title: "The Mind Fog Atrium",
+                            icon: "fa-smog",
+                            color: "text-indigo-400",
+                            narrative: "A cool mist fills the chamber. This is the Mind Fog Atrium, where emotional signs gather.",
+                            options: ["Irritability or impatience", "Anger or resentment", "Nervousness or tension", "Trouble concentrating", "Depression or low mood", "Boredom or lack of interest", "Withdrawal or introversion", "Feeling victimized", "Strained relationships", "Loneliness", "Anxiety"]
+                        },
+                        'work': {
+                            title: "The Hall of Habits",
+                            icon: "fa-briefcase",
+                            color: "text-amber-500",
+                            narrative: "Desks and papers flicker in shifting light. This is the Hall of Habits, where stress reshapes your work patterns.",
+                            options: ["Absences or tardiness", "Accidents or mistakes", "Work addiction", "Criticism of others", "Procrastination"]
+                        }
+                    }
+                },
+                render: () => `
+                    <div id="s6-container" class="fade-in max-w-4xl w-full text-left space-y-6">
+                        <div id="s6-hub" class="text-center space-y-10">
+                            <div><h2 class="text-3xl font-bold text-sky-400 mb-2">The Triad of Warning Signs</h2><p class="text-slate-400">Three chambers await. You must identify the signals echoing in each.</p></div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">${Scenes.scene6.renderChamberBtn('physical')}${Scenes.scene6.renderChamberBtn('emotional')}${Scenes.scene6.renderChamberBtn('work')}</div>
+                            <div id="s6-completion-area" class="hidden fade-in space-y-6 pt-8 border-t border-slate-800 mt-8"><p class="text-xl text-slate-300">You have mapped the warning signs.</p><button onclick="Scenes.scene6.finishScene()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-10 py-4 rounded shadow-lg transition-all transform hover:scale-105 font-bold text-lg">Continue to Scene 7</button></div>
+                        </div>
+                        <div id="s6-chamber" class="hidden max-w-xl mx-auto space-y-6">
+                            <div class="flex justify-between items-center border-b border-slate-700 pb-4"><h3 id="chamber-title" class="text-2xl font-bold">Chamber Title</h3><button onclick="Scenes.scene6.returnToHub()" class="text-slate-500 hover:text-white"><i class="fas fa-times"></i></button></div><p id="chamber-narrative" class="text-slate-300 text-lg leading-relaxed"></p>
+                            <form id="chamber-form" onsubmit="event.preventDefault(); Scenes.scene6.saveChamber()"><fieldset class="space-y-3 mb-6 max-h-80 overflow-y-auto pr-2 custom-scrollbar"><legend class="text-sm uppercase tracking-widest text-slate-500 mb-4 sticky top-0 bg-slate-900/95 py-2 z-10">Select all that apply</legend><div id="chamber-options" class="space-y-2"></div></fieldset><div class="flex gap-4 mt-6 pt-4 border-t border-slate-700"><button type="button" onclick="Scenes.scene6.returnToHub()" class="px-4 py-2 text-slate-400 hover:text-white">Cancel</button><button type="submit" class="flex-grow bg-sky-700 hover:bg-sky-600 text-white py-3 rounded shadow font-bold">Save & Return</button></div></form>
+                        </div>
+                    </div>
+                `,
+                renderChamberBtn: (key) => { const data = Scenes.scene6.data.chambers[key]; const isDone = Scenes.scene6.isChamberDone(key); const statusClass = isDone ? "border-green-500/50 bg-slate-800/80" : "border-slate-700 bg-slate-800 hover:border-sky-500 hover:-translate-y-1"; return `<button onclick="Scenes.scene6.openChamber('${key}')" class="p-6 rounded-lg border-2 ${statusClass} transition-all shadow-lg group relative flex flex-col items-center gap-4"><i class="fas ${data.icon} text-4xl ${data.color} group-hover:scale-110 transition-transform"></i><span class="font-bold text-slate-200 text-lg">${data.title}</span>${isDone ? '<div class="absolute top-3 right-3 text-green-500"><i class="fas fa-check-circle"></i></div>' : ''}</button>`; },
+                isChamberDone: (key) => { return globalState.signsOfStress[key].length > 0; },
+                init: () => { Scenes.scene6.checkCompletion(); },
+                openChamber: (key) => { Scenes.scene6.data.activeChamber = key; const data = Scenes.scene6.data.chambers[key]; const titleEl = document.getElementById('chamber-title'); titleEl.innerText = data.title; titleEl.className = `text-2xl font-bold ${data.color}`; document.getElementById('chamber-narrative').innerText = data.narrative; const container = document.getElementById('chamber-options'); const selectedItems = globalState.signsOfStress[key] || []; container.innerHTML = data.options.map((opt, idx) => `<label class="custom-checkbox flex items-start gap-3 cursor-pointer group p-2 rounded hover:bg-slate-800/50 transition-colors"><input type="checkbox" value="${opt}" ${selectedItems.includes(opt) ? 'checked' : ''} class="peer sr-only"><div class="w-5 h-5 mt-0.5 border border-slate-500 rounded flex items-center justify-center transition-all bg-slate-900 peer-focus:ring-2 peer-focus:ring-sky-400 peer-checked:bg-sky-900 peer-checked:border-sky-400"><i class="fas fa-check text-xs text-white opacity-0 peer-checked:opacity-100 transition-opacity"></i></div><span class="text-slate-300 group-hover:text-white transition-colors text-base">${opt}</span></label>`).join(''); document.getElementById('s6-hub').classList.add('hidden'); const chamberEl = document.getElementById('s6-chamber'); chamberEl.classList.remove('hidden'); chamberEl.classList.add('fade-in'); },
+                saveChamber: () => { const key = Scenes.scene6.data.activeChamber; const container = document.getElementById('chamber-options'); const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked'); const selected = Array.from(checkboxes).map(cb => cb.value); globalState.signsOfStress[key] = selected; saveState(); updateDebugPanel(); Scenes.scene6.returnToHub(); },
+                returnToHub: () => { document.getElementById('s6-chamber').classList.add('hidden'); document.getElementById('s6-hub').classList.remove('hidden'); const grid = document.querySelector('#s6-hub .grid'); grid.innerHTML = `${Scenes.scene6.renderChamberBtn('physical')}${Scenes.scene6.renderChamberBtn('emotional')}${Scenes.scene6.renderChamberBtn('work')}`; Scenes.scene6.checkCompletion(); },
+                checkCompletion: () => { const s = globalState.signsOfStress; if (s.physical.length > 0 && s.emotional.length > 0 && s.work.length > 0) { document.getElementById('s6-completion-area').classList.remove('hidden'); } },
+                finishScene: () => { if (!globalState.systemFlags.completedScenes.includes('scene6')) { globalState.systemFlags.completedScenes.push('scene6'); } saveState(); goToScene('scene7'); }
+            },
+
+            'scene7': {
+                data: {
+                    currentStressorIndex: 0,
+                    currentQuestionIndex: 0, 
+                    stressors: [] 
+                },
+                render: () => `
+                    <div id="s7-container" class="fade-in max-w-2xl w-full text-left space-y-8">
+                        <div id="s7-step1" class="space-y-6">
+                            <h2 class="text-3xl font-bold text-sky-400 mb-2">The Drill-Down Well</h2><p class="text-slate-300 text-lg">To climb out of the labyrinth, we must first go deeper. Identify one or two specific stressors weighing on you right now.</p>
+                            <div class="space-y-4 pt-4"><div><label class="block text-slate-400 text-sm mb-1 uppercase tracking-wide">Primary Stressor (Required)</label><input type="text" id="stressor1" placeholder="e.g., Upcoming Audit, Family conflict" class="w-full bg-slate-900 border border-slate-700 rounded p-4 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"></div><div><label class="block text-slate-400 text-sm mb-1 uppercase tracking-wide">Secondary Stressor (Optional)</label><input type="text" id="stressor2" placeholder="e.g., Car repairs" class="w-full bg-slate-900 border border-slate-700 rounded p-4 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"></div></div>
+                            <button onclick="Scenes.scene7.startDrill()" class="w-full bg-sky-800 hover:bg-sky-700 text-white font-bold py-4 rounded shadow-lg transition-all transform hover:scale-105 mt-6"><i class="fas fa-arrow-down mr-2"></i> Descend into the Well</button>
+                        </div>
+                        <div id="s7-drill-container" class="hidden space-y-6 text-center">
+                            <div class="mb-8"><p class="text-sm text-slate-500 uppercase tracking-widest mb-1">Drilling into</p><h3 id="drill-target-name" class="text-2xl font-bold text-white">Target Name</h3></div>
+                            <div id="drill-q-area" class="bg-slate-900 border border-slate-700 p-8 rounded shadow-inner min-h-[200px] flex flex-col justify-center"><!-- Dynamic Question Content --></div>
+                            <div class="pt-4 flex justify-center"><button onclick="Scenes.scene7.nextDrillStep()" class="bg-slate-700 hover:bg-slate-600 text-white px-8 py-3 rounded shadow transition-all">Go Deeper <i class="fas fa-chevron-down ml-2"></i></button></div>
+                        </div>
+                        <div id="s7-summary" class="hidden text-center space-y-8 fade-in">
+                            <div class="text-6xl text-emerald-500 mb-4 animate-bounce"><i class="fas fa-check-circle"></i></div><h2 class="text-3xl font-bold text-white">Bottom Reached</h2><p class="text-lg text-slate-300 max-w-md mx-auto">You have touched the root of your stress. By naming the fear and visualizing the change, you have begun to disarm it.</p><button onclick="Scenes.scene7.finishScene()" class="bg-green-700 hover:bg-green-600 text-white px-10 py-4 rounded shadow-lg transition-all transform hover:scale-105 font-bold text-lg">Continue to Scene 8</button>
+                        </div>
+                    </div>
+                `,
+                startDrill: () => { const s1 = document.getElementById('stressor1').value.trim(); const s2 = document.getElementById('stressor2').value.trim(); if (!s1) { alert("Please identify at least one stressor to proceed."); return; } globalState.coreStressors = []; Scenes.scene7.data.stressors = []; Scenes.scene7.data.stressors.push({ name: s1, drillDown: {}, restPlan: {} }); if (s2) { Scenes.scene7.data.stressors.push({ name: s2, drillDown: {}, restPlan: {} }); } Scenes.scene7.data.currentStressorIndex = 0; Scenes.scene7.data.currentQuestionIndex = 0; document.getElementById('s7-step1').classList.add('hidden'); const drillCont = document.getElementById('s7-drill-container'); drillCont.classList.remove('hidden'); drillCont.classList.add('fade-in'); Scenes.scene7.renderQuestion(); },
+                renderQuestion: () => { const sIdx = Scenes.scene7.data.currentStressorIndex; const qIdx = Scenes.scene7.data.currentQuestionIndex; const stressor = Scenes.scene7.data.stressors[sIdx]; const area = document.getElementById('drill-q-area'); document.getElementById('drill-target-name').innerText = stressor.name; area.style.opacity = 0; setTimeout(() => { if (qIdx === 0) { area.innerHTML = `<div class="space-y-4 text-left"><label class="block text-sky-400 font-bold text-lg mb-2">I feel...</label><input type="text" id="drill-input-feeling" placeholder="e.g., overwhelmed, angry, trapped" class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-sky-500"><label class="block text-sky-400 font-bold text-lg mb-2 mt-4">Because...</label><input type="text" id="drill-input-because" placeholder="e.g., I have too much to do, I feel unheard" class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-sky-500"></div>`; } else if (qIdx === 1) { area.innerHTML = `<div class="space-y-4 text-left"><label class="block text-purple-400 font-bold text-lg mb-2">Underneath that, I’m afraid that...</label><textarea id="drill-input-fear" rows="3" placeholder="e.g., I will fail, I am not good enough" class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-purple-500"></textarea></div>`; } else if (qIdx === 2) { area.innerHTML = `<div class="space-y-4 text-left"><label class="block text-emerald-400 font-bold text-lg mb-2">If this stressor vanished for a week, what’s the first thing you’d notice feeling differently?</label><textarea id="drill-input-change" rows="3" placeholder="e.g., I would sleep better, I would laugh more" class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-emerald-500"></textarea></div>`; } area.style.opacity = 1; const firstInput = area.querySelector('input, textarea'); if(firstInput) firstInput.focus(); }, 200); },
+                nextDrillStep: () => { const sIdx = Scenes.scene7.data.currentStressorIndex; const qIdx = Scenes.scene7.data.currentQuestionIndex; const stressor = Scenes.scene7.data.stressors[sIdx]; if (qIdx === 0) { const feeling = document.getElementById('drill-input-feeling').value; const because = document.getElementById('drill-input-because').value; if(!feeling || !because) { alert("Please complete the thought."); return; } stressor.drillDown.feeling = feeling; stressor.drillDown.because = because; } else if (qIdx === 1) { const fear = document.getElementById('drill-input-fear').value; if(!fear) { alert("Please identify the fear."); return; } stressor.drillDown.fear = fear; } else if (qIdx === 2) { const change = document.getElementById('drill-input-change').value; if(!change) { alert("Please visualize the change."); return; } stressor.drillDown.desiredChange = change; } if (qIdx < 2) { Scenes.scene7.data.currentQuestionIndex++; Scenes.scene7.renderQuestion(); } else { globalState.coreStressors.push(stressor); saveState(); if (sIdx + 1 < Scenes.scene7.data.stressors.length) { Scenes.scene7.data.currentStressorIndex++; Scenes.scene7.data.currentQuestionIndex = 0; Scenes.scene7.renderQuestion(); } else { Scenes.scene7.showSummary(); } } updateDebugPanel(); },
+                showSummary: () => { document.getElementById('s7-drill-container').classList.add('hidden'); const summary = document.getElementById('s7-summary'); summary.classList.remove('hidden'); },
+                finishScene: () => { if (!globalState.systemFlags.completedScenes.includes('scene7')) { globalState.systemFlags.completedScenes.push('scene7'); } saveState(); goToScene('scene8'); }
+            },
+
+            'scene8': {
+                data: {
+                    step: 1,
+                    stressorIndex: null,
+                    restPlan: { reframe: "", examine: { control: [], influence: [], concern: [] }, strategize: { problem: [], emotion: [] }, try: { confidence: 5, easeFactors: [], checkInMethod: "" } }
+                },
+                render: () => `
+                    <div id="s8-container" class="fade-in max-w-3xl w-full text-left space-y-8">
+                        <div class="border-b border-slate-700 pb-4 mb-4"><h2 class="text-3xl font-bold text-sky-400">The R.E.S.T. Engine Room</h2><p class="text-slate-400">Reframe. Examine. Strategize. Try.</p></div>
+                        <div id="s8-step-content"><!-- Content injected by JS --></div>
+                    </div>
+                `,
+                init: () => { if (globalState.coreStressors.length > 1) { Scenes.scene8.data.step = 1; } else { Scenes.scene8.data.stressorIndex = 0; Scenes.scene8.data.step = 2; } Scenes.scene8.renderStep(); },
+                renderStep: () => {
+                    const step = Scenes.scene8.data.step;
+                    const container = document.getElementById('s8-step-content');
+                    const hasBonus = globalState.systemFlags.hasReframeBonus;
+                    const currentStressor = globalState.coreStressors[Scenes.scene8.data.stressorIndex];
+                    if (step === 1) {
+                        let buttons = globalState.coreStressors.map((s, i) => `<button onclick="Scenes.scene8.selectStressor(${i})" class="w-full p-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-left transition-all group"><span class="font-bold text-white text-lg">${s.name}</span><i class="fas fa-chevron-right float-right mt-1 text-slate-500 group-hover:text-sky-400"></i></button>`).join('');
+                        container.innerHTML = `<h3 class="text-xl text-white mb-4">Select a stressor to process:</h3><div class="space-y-3">${buttons}</div>`;
+                    } else if (step === 2) {
+                        const bonusUI = hasBonus ? `<div class="bg-yellow-900/20 border border-yellow-500/50 p-3 rounded mb-4 flex items-center gap-3 animate-pulse"><i class="fas fa-lightbulb text-yellow-400 text-xl"></i><span class="text-yellow-200 text-sm font-bold">Insight Bonus Active: Your perception is sharper.</span></div>` : '';
+                        container.innerHTML = `<div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold text-white">Step 1: Reframe</h3><span class="text-slate-500">Stressor: <span class="text-sky-400">${currentStressor.name}</span></span></div>${bonusUI}<p class="text-slate-300 mb-4">Choose a perspective shift or write your own:</p><div class="space-y-3"><label class="block p-3 border border-slate-700 rounded bg-slate-800/50 cursor-pointer hover:border-sky-500"><input type="radio" name="reframeOpt" value="This is difficult, and it’s also an opportunity to grow." class="mr-2"><span class="text-slate-200">"This is difficult, and it’s also an opportunity to..."</span></label><label class="block p-3 border border-slate-700 rounded bg-slate-800/50 cursor-pointer hover:border-sky-500"><input type="radio" name="reframeOpt" value="This stress is a sign that I care deeply." class="mr-2"><span class="text-slate-200">"This stress is a sign that I care about..."</span></label><label class="block p-3 border border-slate-700 rounded bg-slate-800/50 cursor-pointer hover:border-sky-500"><input type="radio" name="reframeOpt" value="control" class="mr-2"><span class="text-slate-200">"I can’t control everything, but I can control..."</span></label></div><textarea id="reframe-text" class="w-full mt-4 p-3 bg-slate-900 border border-slate-600 rounded text-white focus:border-sky-500 h-24" placeholder="Draft your reframe here..."></textarea><div class="mt-6 text-right"><button onclick="Scenes.scene8.saveReframe()" class="bg-sky-700 hover:bg-sky-600 text-white px-6 py-2 rounded font-bold">Next: Examine <i class="fas fa-arrow-right ml-2"></i></button></div>`;
+                        setTimeout(() => { document.querySelectorAll('input[name="reframeOpt"]').forEach(r => { r.addEventListener('change', (e) => { const ta = document.getElementById('reframe-text'); if(e.target.value !== 'control') ta.value = e.target.value; else ta.value = "I can’t control everything here, but I can control "; ta.focus(); }); }); }, 0);
+                    } else if (step === 3) {
+                        container.innerHTML = `<h3 class="text-2xl font-bold text-white mb-2">Step 2: Examine</h3><p class="text-slate-300 mb-6">Sort the elements of this stressor into three buckets.</p><div class="grid grid-cols-1 md:grid-cols-3 gap-4"><div class="space-y-2"><label class="block text-green-400 font-bold"><i class="fas fa-check-circle mr-1"></i> In My Control</label><textarea id="examine-control" class="w-full h-40 bg-slate-900 border border-green-900/50 rounded p-2 text-sm text-slate-200 focus:border-green-500" placeholder="My actions, my words..."></textarea></div><div class="space-y-2"><label class="block text-yellow-400 font-bold"><i class="fas fa-hand-paper mr-1"></i> In My Influence</label><textarea id="examine-influence" class="w-full h-40 bg-slate-900 border border-yellow-900/50 rounded p-2 text-sm text-slate-200 focus:border-yellow-500" placeholder="Others' moods, outcomes..."></textarea></div><div class="space-y-2"><label class="block text-red-400 font-bold"><i class="fas fa-ban mr-1"></i> Circle of Concern</label><textarea id="examine-concern" class="w-full h-40 bg-slate-900 border border-red-900/50 rounded p-2 text-sm text-slate-200 focus:border-red-500" placeholder="The economy, the weather..."></textarea></div></div><div class="mt-6 text-right"><button onclick="Scenes.scene8.saveExamine()" class="bg-sky-700 hover:bg-sky-600 text-white px-6 py-2 rounded font-bold">Next: Strategize <i class="fas fa-arrow-right ml-2"></i></button></div>`;
+                    } else if (step === 4) {
+                        container.innerHTML = `<h3 class="text-2xl font-bold text-white mb-2">Step 3: Strategize</h3><p class="text-slate-300 mb-6">Develop specific actions for what you can control.</p><div class="space-y-6"><div><label class="block text-sky-300 font-bold mb-2"><i class="fas fa-tools mr-2"></i>Problem-Focused Strategies</label><p class="text-xs text-slate-500 mb-2">Concrete steps to fix the root cause.</p><textarea id="strat-prob" class="w-full h-24 bg-slate-900 border border-slate-600 rounded p-3 text-slate-200 focus:border-sky-500" placeholder="- Create a timeline\n- Ask for help"></textarea></div><div><label class="block text-purple-300 font-bold mb-2"><i class="fas fa-heart mr-2"></i>Emotion-Focused Strategies</label><p class="text-xs text-slate-500 mb-2">Ways to manage the feeling if the problem persists.</p><textarea id="strat-emo" class="w-full h-24 bg-slate-900 border border-slate-600 rounded p-3 text-slate-200 focus:border-purple-500" placeholder="- Breathing exercises\n- Venting to a friend"></textarea></div></div><div class="mt-6 text-right"><button onclick="Scenes.scene8.saveStrategize()" class="bg-sky-700 hover:bg-sky-600 text-white px-6 py-2 rounded font-bold">Next: Try <i class="fas fa-arrow-right ml-2"></i></button></div>`;
+                    } else if (step === 5) {
+                        container.innerHTML = `<h3 class="text-2xl font-bold text-white mb-2">Step 4: Try</h3><p class="text-slate-300 mb-6">Commit to action and set yourself up for success.</p><div class="space-y-6 bg-slate-800 p-6 rounded border border-slate-700"><div><label class="block text-white font-bold mb-2">Confidence Level (1-10)</label><div class="flex items-center gap-4"><span class="text-slate-400 text-sm">Low</span><input type="range" id="try-conf" min="1" max="10" value="5" class="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"><span class="text-slate-400 text-sm">High</span><span id="conf-val" class="text-sky-400 font-bold text-xl w-8 text-center">5</span></div></div><div><label class="block text-white font-bold mb-2">What will make this easier?</label><div class="grid grid-cols-2 gap-2 text-sm" id="ease-opts">${['Specific time block', 'Accountability partner', 'Breaking it down', 'Reward after'].map(o => `<label class="custom-checkbox flex items-center gap-2 cursor-pointer"><input type="checkbox" value="${o}" class="peer sr-only"><div class="w-4 h-4 border border-slate-500 rounded flex items-center justify-center bg-slate-900 peer-checked:bg-sky-500 peer-checked:border-sky-500"><i class="fas fa-check text-[10px] text-white opacity-0 peer-checked:opacity-100"></i></div><span class="text-slate-300 peer-checked:text-white">${o}</span></label>`).join('')}</div><input type="text" id="ease-custom" placeholder="Other..." class="mt-2 w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white"></div><div><label class="block text-white font-bold mb-2">How will you check in?</label><div class="flex gap-4 text-sm"><label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="checkin" value="Daily Journal" class="text-sky-500 focus:ring-sky-500 bg-slate-900"> <span class="text-slate-300">Daily Journal</span></label><label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="checkin" value="Weekly Review" class="text-sky-500 focus:ring-sky-500 bg-slate-900"> <span class="text-slate-300">Weekly Review</span></label></div></div></div><div class="mt-6 text-right"><button onclick="Scenes.scene8.saveTry()" class="bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded font-bold shadow-lg transform hover:scale-105">Engage Engine <i class="fas fa-power-off ml-2"></i></button></div>`;
+                        setTimeout(() => { const slider = document.getElementById('try-conf'); if(slider) { slider.oninput = function() { document.getElementById('conf-val').innerText = this.value; } } }, 0);
+                    } else if (step === 6) {
+                        container.innerHTML = `<div class="text-center space-y-6 fade-in"><div class="text-6xl text-sky-500 mb-4 animate-spin-slow" style="animation-duration: 10s"><i class="fas fa-cog"></i></div><h3 class="text-3xl font-bold text-white">Engine Online</h3><p class="text-lg text-slate-300 max-w-md mx-auto">You have built a mechanism for movement. The stressor remains, but you are no longer just carrying it—you are navigating it.</p><button onclick="Scenes.scene8.finishScene()" class="bg-green-700 hover:bg-green-600 text-white px-10 py-4 rounded shadow-lg transition-all transform hover:scale-105 font-bold text-lg mt-4">Continue to Scene 9</button></div>`;
+                    }
+                },
+                selectStressor: (idx) => { Scenes.scene8.data.stressorIndex = idx; Scenes.scene8.data.step = 2; Scenes.scene8.renderStep(); },
+                saveReframe: () => { const val = document.getElementById('reframe-text').value; if (!val.trim()) { alert("Please enter a reframe statement."); return; } const idx = Scenes.scene8.data.stressorIndex; globalState.coreStressors[idx].restPlan.reframe = val; saveState(); Scenes.scene8.data.step = 3; Scenes.scene8.renderStep(); },
+                saveExamine: () => { const c = document.getElementById('examine-control').value.split('\n').filter(s=>s.trim()); const i = document.getElementById('examine-influence').value.split('\n').filter(s=>s.trim()); const cn = document.getElementById('examine-concern').value.split('\n').filter(s=>s.trim()); const idx = Scenes.scene8.data.stressorIndex; globalState.coreStressors[idx].restPlan.examine = { control: c, influence: i, concern: cn }; saveState(); Scenes.scene8.data.step = 4; Scenes.scene8.renderStep(); },
+                saveStrategize: () => { const p = document.getElementById('strat-prob').value.split('\n').filter(s=>s.trim()); const e = document.getElementById('strat-emo').value.split('\n').filter(s=>s.trim()); const idx = Scenes.scene8.data.stressorIndex; globalState.coreStressors[idx].restPlan.strategize = { problem: p, emotion: e }; saveState(); Scenes.scene8.data.step = 5; Scenes.scene8.renderStep(); },
+                saveTry: () => { const conf = document.getElementById('try-conf').value; const eases = Array.from(document.querySelectorAll('#ease-opts input:checked')).map(cb => cb.value); const customEase = document.getElementById('ease-custom').value; if(customEase.trim()) eases.push(customEase.trim()); const checkInEl = document.querySelector('input[name="checkin"]:checked'); const checkIn = checkInEl ? checkInEl.value : "Ad-hoc"; const idx = Scenes.scene8.data.stressorIndex; globalState.coreStressors[idx].restPlan.try = { confidence: parseInt(conf), easeFactors: eases, checkInMethod: checkIn }; saveState(); updateDebugPanel(); Scenes.scene8.data.step = 6; Scenes.scene8.renderStep(); },
+                finishScene: () => { if (!globalState.systemFlags.completedScenes.includes('scene8')) { globalState.systemFlags.completedScenes.push('scene8'); } saveState(); goToScene('scene9'); }
+            },
+
+            'scene9': {
+                data: {
+                    step: 1
+                },
+                render: () => `
+                    <div id="s9-container" class="fade-in max-w-4xl w-full text-left space-y-8">
+                        <div class="border-b border-slate-700 pb-4 mb-4">
+                            <h2 class="text-3xl font-bold text-sky-400">The Scenario Gate</h2>
+                            <p class="text-slate-400">Apply the R.E.S.T. framework to an external challenge.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div class="md:col-span-1 bg-slate-800 p-6 rounded-lg border-l-4 border-sky-600 h-fit">
+                                <h4 class="text-sky-400 font-bold uppercase tracking-widest text-sm mb-3">Lee's Situation</h4>
+                                <p class="text-slate-300 text-sm leading-relaxed">
+                                    Lee manages a busy shift. New safety protocols have just been introduced, slowing down service. Customers are complaining about the wait, and the team is getting frustrated and cutting corners to speed up. Lee feels responsible for everything.
+                                </p>
+                            </div>
+                            <div id="s9-interaction" class="md:col-span-2">
+                                <!-- Dynamic Step Content -->
+                            </div>
+                        </div>
+                    </div>
+                `,
+                init: () => { Scenes.scene9.renderStep(); },
+                renderStep: () => {
+                    const step = Scenes.scene9.data.step;
+                    const container = document.getElementById('s9-interaction');
+                    if (step === 1) {
+                        container.innerHTML = `<div class="fade-in"><h3 class="text-2xl font-bold text-white mb-4"><span class="text-sky-500">R</span>eframe</h3><p class="text-slate-300 mb-4">Lee feels overwhelmed. Which thought offers a healthier perspective?</p><div class="space-y-3">${Scenes.scene9.makeRadio('reframe', 'This is a short‑term transition; as people learn the protocols, the load will ease.')}${Scenes.scene9.makeRadio('reframe', 'This is an opportunity to reconnect with your team and customers.')}${Scenes.scene9.makeRadio('reframe', 'This stress is a sign that expectations may need to be renegotiated.')}${Scenes.scene9.makeRadio('reframe', 'This situation won’t last forever — routines will stabilize.')}<label class="block p-3 border border-slate-700 rounded bg-slate-900 cursor-pointer hover:border-sky-500 transition-colors"><div class="flex items-center"><input type="radio" name="reframe" value="custom" class="mr-3 text-sky-500 focus:ring-sky-500"><span class="text-slate-200">Write your own...</span></div><input type="text" id="reframe-custom" class="mt-2 w-full bg-slate-800 border border-slate-600 rounded p-2 text-white text-sm focus:border-sky-500" onclick="this.previousElementSibling.querySelector('input').checked = true"></label></div><div class="mt-6 text-right"><button onclick="Scenes.scene9.saveStep1()" class="bg-sky-700 hover:bg-sky-600 text-white px-6 py-2 rounded font-bold transition-transform transform hover:scale-105">Next: Examine <i class="fas fa-arrow-right ml-2"></i></button></div></div>`;
+                    } else if (step === 2) {
+                        container.innerHTML = `<div class="fade-in"><h3 class="text-2xl font-bold text-white mb-4"><span class="text-sky-500">E</span>xamine</h3><p class="text-slate-300 mb-4">Help Lee sort the situation. Check the items that belong in each category.</p><div class="space-y-6"><div class="bg-slate-900/50 p-4 rounded border border-slate-700"><h4 class="text-green-400 font-bold mb-2">In Lee's Control</h4><div class="grid grid-cols-1 gap-2" id="exam-control">${Scenes.scene9.makeCheckbox('How Lee speaks to the team', 'control')}${Scenes.scene9.makeCheckbox('Lee’s own adherence to protocols', 'control')}${Scenes.scene9.makeCheckbox('Taking scheduled breaks', 'control')}</div></div><div class="bg-slate-900/50 p-4 rounded border border-slate-700"><h4 class="text-yellow-400 font-bold mb-2">In Lee's Influence</h4><div class="grid grid-cols-1 gap-2" id="exam-influence">${Scenes.scene9.makeCheckbox('Team morale and tone', 'influence')}${Scenes.scene9.makeCheckbox('Customer waiting experience', 'influence')}${Scenes.scene9.makeCheckbox('Staff feedback to management', 'influence')}</div></div><div class="bg-slate-900/50 p-4 rounded border border-slate-700"><h4 class="text-red-400 font-bold mb-2">Circle of Concern (No Control)</h4><div class="grid grid-cols-1 gap-2" id="exam-concern">${Scenes.scene9.makeCheckbox('Corporate safety policy', 'concern')}${Scenes.scene9.makeCheckbox('The volume of customers', 'concern')}${Scenes.scene9.makeCheckbox('Supply chain delays', 'concern')}</div></div></div><div class="mt-6 text-right"><button onclick="Scenes.scene9.saveStep2()" class="bg-sky-700 hover:bg-sky-600 text-white px-6 py-2 rounded font-bold transition-transform transform hover:scale-105">Next: Strategize <i class="fas fa-arrow-right ml-2"></i></button></div></div>`;
+                    } else if (step === 3) {
+                        container.innerHTML = `<div class="fade-in"><h3 class="text-2xl font-bold text-white mb-4"><span class="text-sky-500">S</span>trategize</h3><p class="text-slate-300 mb-4">Select strategies Lee could use.</p><div class="space-y-6"><div><h4 class="text-sky-300 font-bold mb-2"><i class="fas fa-tools mr-2"></i>Problem-Focused (Fixing the Issue)</h4><div class="grid grid-cols-1 gap-2" id="strat-prob">${Scenes.scene9.makeCheckbox('Create a visual checklist for the new protocols', 'strat')}${Scenes.scene9.makeCheckbox('Assign a "protocol lead" for the shift', 'strat')}${Scenes.scene9.makeCheckbox('Ask management for temporary extra staff', 'strat')}</div></div><div><h4 class="text-purple-300 font-bold mb-2"><i class="fas fa-heart mr-2"></i>Emotion-Focused (Managing the Stress)</h4><div class="grid grid-cols-1 gap-2" id="strat-emo">${Scenes.scene9.makeCheckbox('Take three deep breaths before addressing the team', 'strat')}${Scenes.scene9.makeCheckbox('Vent constructively to a mentor after work', 'strat')}${Scenes.scene9.makeCheckbox('Focus on one customer at a time', 'strat')}</div></div></div><div class="mt-6 text-right"><button onclick="Scenes.scene9.saveStep3()" class="bg-sky-700 hover:bg-sky-600 text-white px-6 py-2 rounded font-bold transition-transform transform hover:scale-105">Next: Try <i class="fas fa-arrow-right ml-2"></i></button></div></div>`;
+                    } else if (step === 4) {
+                        container.innerHTML = `<div class="fade-in"><h3 class="text-2xl font-bold text-white mb-4"><span class="text-sky-500">T</span>ry</h3><p class="text-slate-300 mb-4">How should Lee commit to action?</p><div class="space-y-4"><label class="block text-slate-400 text-sm uppercase tracking-wide">Reflect on the outcome</label>${Scenes.scene9.makeRadio('tryReflect', 'Lee will check stress levels at the mid-shift break.')}${Scenes.scene9.makeRadio('tryReflect', 'Lee will ask the team for one thing that worked well today.')}<div class="mt-4"><label class="block text-slate-400 text-sm uppercase tracking-wide mb-2">Your advice to Lee (Optional)</label><textarea id="try-custom" class="w-full bg-slate-900 border border-slate-700 rounded p-3 text-white focus:border-emerald-500 h-24" placeholder="Remember to..."></textarea></div></div><div class="mt-6 text-right"><button onclick="Scenes.scene9.saveStep4()" class="bg-green-700 hover:bg-green-600 text-white px-6 py-2 rounded font-bold shadow-lg transition-transform transform hover:scale-105">Complete Scenario <i class="fas fa-check ml-2"></i></button></div></div>`;
+                    } else if (step === 5) {
+                        container.innerHTML = `<div class="text-center space-y-6 fade-in h-full flex flex-col justify-center"><div class="text-6xl text-sky-500 mb-2"><i class="fas fa-door-open"></i></div><h3 class="text-3xl font-bold text-white">Gate Passed</h3><p class="text-lg text-slate-300">You have successfully navigated the scenario. By applying R.E.S.T. objectively, you sharpen the tools needed for your own journey.</p><button onclick="Scenes.scene9.finishScene()" class="bg-green-700 hover:bg-green-600 text-white px-10 py-4 rounded shadow-lg transition-all transform hover:scale-105 font-bold text-lg mt-4">Continue to Scene 10</button></div>`;
+                    }
+                },
+                makeRadio: (name, text) => `<label class="block p-3 border border-slate-700 rounded bg-slate-900 cursor-pointer hover:border-sky-500 transition-colors flex items-start"><input type="radio" name="${name}" value="${text}" class="mt-1 mr-3 text-sky-500 focus:ring-sky-500"><span class="text-slate-200 text-sm">${text}</span></label>`,
+                makeCheckbox: (text, group) => `<label class="custom-checkbox flex items-start gap-2 cursor-pointer p-2 hover:bg-slate-800 rounded transition-colors"><input type="checkbox" value="${text}" data-group="${group}" class="peer sr-only"><div class="w-4 h-4 mt-1 border border-slate-500 rounded flex items-center justify-center bg-slate-800 peer-checked:bg-sky-500 peer-checked:border-sky-500"><i class="fas fa-check text-[10px] text-white opacity-0 peer-checked:opacity-100"></i></div><span class="text-slate-300 text-sm peer-checked:text-white">${text}</span></label>`,
+                saveStep1: () => { const selected = document.querySelector('input[name="reframe"]:checked'); if (!selected) { alert("Please select an option."); return; } let val = selected.value; if (val === 'custom') { val = document.getElementById('reframe-custom').value; if (!val.trim()) { alert("Please write your reframe."); return; } } globalState.leeScenario.reframeChoice = val; saveState(); Scenes.scene9.data.step = 2; Scenes.scene9.renderStep(); },
+                saveStep2: () => { const getChecked = (id) => Array.from(document.querySelectorAll(`#${id} input:checked`)).map(cb => cb.value); globalState.leeScenario.examine.control = getChecked('exam-control'); globalState.leeScenario.examine.influence = getChecked('exam-influence'); globalState.leeScenario.examine.concern = getChecked('exam-concern'); saveState(); Scenes.scene9.data.step = 3; Scenes.scene9.renderStep(); },
+                saveStep3: () => { const prob = Array.from(document.querySelectorAll('#strat-prob input:checked')).map(cb => cb.value); const emo = Array.from(document.querySelectorAll('#strat-emo input:checked')).map(cb => cb.value); globalState.leeScenario.strategiesChosen = [...prob, ...emo]; saveState(); Scenes.scene9.data.step = 4; Scenes.scene9.renderStep(); },
+                saveStep4: () => { const selected = document.querySelector('input[name="tryReflect"]:checked'); if (!selected) { alert("Please select a reflection method."); return; } const reflections = [selected.value]; const custom = document.getElementById('try-custom').value; if (custom.trim()) reflections.push(custom.trim()); globalState.leeScenario.reflections = reflections; globalState.player.insightTokens += 1; saveState(); updateDebugPanel(); Scenes.scene9.data.step = 5; Scenes.scene9.renderStep(); },
+                finishScene: () => { if (!globalState.systemFlags.completedScenes.includes('scene9')) { globalState.systemFlags.completedScenes.push('scene9'); } saveState(); goToScene('scene10'); }
+            },
+
+            // --- SCENE 10: THE CHAMBER OF INTEGRATION ---
+            'scene10': {
+                render: () => `
+                    <div id="s10-container" class="fade-in max-w-4xl w-full text-left space-y-8">
+                        <div class="border-b border-slate-700 pb-4 mb-4 text-center">
+                            <h2 class="text-3xl font-bold text-sky-400">The Chamber of Integration</h2>
+                            <p class="text-slate-400">Here, you forge your insights into action.</p>
+                        </div>
+
+                        <form id="action-plan-form" onsubmit="event.preventDefault(); Scenes.scene10.saveActionPlan();" class="space-y-10">
+                            
+                            <!-- Section 1: The Objective -->
+                            <div class="bg-slate-900/50 p-6 rounded border border-slate-700">
+                                <h3 class="text-xl font-bold text-white mb-4 border-b border-slate-800 pb-2"><i class="fas fa-bullseye text-sky-500 mr-2"></i>The Objective</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div class="space-y-2">
+                                        <label class="block text-slate-300 font-bold">My Goal is...</label>
+                                        <input type="text" id="ap-goal" class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-sky-500" placeholder="e.g., To reduce daily anxiety by 20%">
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="block text-slate-300 font-bold">What success will look like</label>
+                                        <input type="text" id="ap-success" class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-sky-500" placeholder="e.g., Sleeping through the night, feeling calm in meetings">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Section 2: The Strategy -->
+                            <div class="bg-slate-900/50 p-6 rounded border border-slate-700">
+                                <h3 class="text-xl font-bold text-white mb-4 border-b border-slate-800 pb-2"><i class="fas fa-chess-knight text-purple-500 mr-2"></i>The Strategy</h3>
+                                <div class="space-y-6">
+                                    <div class="space-y-2">
+                                        <label class="block text-slate-300 font-bold">Actions I can take to lessen the causes of stress</label>
+                                        <p class="text-xs text-slate-500">List specific steps (one per line)</p>
+                                        <textarea id="ap-lessen" class="w-full h-24 bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-purple-500" placeholder="- Delegate task X\n- Set boundaries on email"></textarea>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="block text-slate-300 font-bold">How I will cope with causes I cannot control</label>
+                                        <p class="text-xs text-slate-500">List coping mechanisms (one per line)</p>
+                                        <textarea id="ap-cope" class="w-full h-24 bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-purple-500" placeholder="- Practice mindfulness\n- Acceptance journaling"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Section 3: The Logistics -->
+                            <div class="bg-slate-900/50 p-6 rounded border border-slate-700">
+                                <h3 class="text-xl font-bold text-white mb-4 border-b border-slate-800 pb-2"><i class="fas fa-clipboard-list text-amber-500 mr-2"></i>The Logistics</h3>
+                                <div class="grid grid-cols-1 gap-6">
+                                    <div class="space-y-2">
+                                        <label class="block text-slate-300 font-bold">Measurements of Success</label>
+                                        <textarea id="ap-measure" class="w-full h-20 bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-amber-500" placeholder="How will you track progress?"></textarea>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div class="space-y-2">
+                                            <label class="block text-slate-300 font-bold">Timeline</label>
+                                            <input type="text" id="ap-timeline" class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-amber-500" placeholder="e.g., Check in every Friday for a month">
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label class="block text-slate-300 font-bold">Assistance Needed</label>
+                                            <textarea id="ap-assist" class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-amber-500 h-[50px]" placeholder="Who can help?"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Section 4: The Foundation -->
+                            <div class="bg-slate-900/50 p-6 rounded border border-slate-700">
+                                <h3 class="text-xl font-bold text-white mb-4 border-b border-slate-800 pb-2"><i class="fas fa-heart text-rose-500 mr-2"></i>The Foundation</h3>
+                                <div class="space-y-2">
+                                    <label class="block text-slate-300 font-bold">How I will take care of myself</label>
+                                    <textarea id="ap-selfcare" class="w-full h-24 bg-slate-800 border border-slate-600 rounded p-3 text-white focus:border-rose-500" placeholder="- 8 hours sleep\n- Weekend hikes"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="text-center pt-6">
+                                <button type="submit" class="bg-green-700 hover:bg-green-600 text-white px-12 py-4 rounded-lg shadow-xl transition-all transform hover:scale-105 font-bold text-xl flex items-center justify-center mx-auto gap-3">
+                                    <i class="fas fa-file-signature"></i> Seal Your Pact
+                                </button>
+                            </div>
+
+                        </form>
+                    </div>
+                `,
+
+                saveActionPlan: () => {
+                    // Helper to split textareas into arrays
+                    const getList = (id) => document.getElementById(id).value.split('\n').filter(line => line.trim() !== '');
+                    const getVal = (id) => document.getElementById(id).value.trim();
+
+                    // Validation (Basic)
+                    if (!getVal('ap-goal')) { alert("Please define your goal."); return; }
+
+                    // Update State
+                    globalState.actionPlan.goal = getVal('ap-goal');
+                    globalState.actionPlan.whatSuccessLooksLike = getVal('ap-success');
+                    globalState.actionPlan.timeline = getVal('ap-timeline');
+                    
+                    globalState.actionPlan.lessenCauses = getList('ap-lessen');
+                    globalState.actionPlan.copeWithUncontrollable = getList('ap-cope');
+                    globalState.actionPlan.measurements = getList('ap-measure');
+                    globalState.actionPlan.assistanceNeeded = getList('ap-assist');
+                    globalState.actionPlan.selfCare = getList('ap-selfcare');
+
+                    // Mark Complete
+                    if (!globalState.systemFlags.completedScenes.includes('scene10')) {
+                        globalState.systemFlags.completedScenes.push('scene10');
+                    }
+                    globalState.systemFlags.timestampCompleted = Date.now();
+
+                    saveState();
+                    updateDebugPanel();
+
+                    // Transition
+                    goToScene('end'); 
+                }
+            },
+
+            // --- SCENE 11: THE MAP OF RETURNING (Ending) ---
+            'end': {
+                render: () => {
+                    const p = globalState.player;
+                    const ap = globalState.actionPlan;
+                    const mbti = `${p.mbtiProfile.interaction}${p.mbtiProfile.information}${p.mbtiProfile.decision}${p.mbtiProfile.orientation}`;
+                    
+                    // Helpers for rendering lists
+                    const renderList = (items, fallback) => {
+                        if (!items || items.length === 0) return `<li class="text-slate-500 italic">${fallback}</li>`;
+                        return items.map(i => `<li>${i}</li>`).join('');
+                    };
+
+                    const renderPain = (key, label) => {
+                        const val = p.stylePainPoints[key];
+                        if (!val || val === 'Neither') return '';
+                        return `<li class="text-sm"><span class="text-sky-400 font-bold">${label}:</span> ${val}</li>`;
+                    };
+
+                    return `
+                    <div id="ending-container" class="fade-in max-w-5xl w-full text-left space-y-12 pb-12">
+                        
+                        <!-- Header / Narrative -->
+                        <div class="text-center space-y-4">
+                            <div class="text-6xl text-yellow-400 mb-6 animate-pulse inline-block">
+                                <i class="fas fa-sun"></i>
+                            </div>
+                            <h2 class="text-4xl md:text-5xl font-bold text-white tracking-wider">The Map of Returning</h2>
+                            <p class="text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed">
+                                The labyrinth walls dissolve into mist. You stand at the threshold, no longer lost, but holding a map of your own making. 
+                                You entered as a wanderer; you leave as <span class="text-sky-400 font-bold">${p.labyrinthClass || 'The Architect'}</span>.
+                            </p>
+                        </div>
+
+                        <!-- 1. The Traveler (Profile) -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div class="bg-slate-900 border border-slate-700 p-6 rounded-lg shadow-lg relative overflow-hidden">
+                                <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fas fa-user-astronaut text-8xl"></i></div>
+                                <h3 class="text-2xl font-bold text-white mb-4 border-b border-slate-700 pb-2">The Traveler</h3>
+                                <div class="space-y-4 relative z-10">
+                                    <div>
+                                        <p class="text-xs text-slate-500 uppercase tracking-widest">Archetype</p>
+                                        <p class="text-xl text-sky-400 font-mono">${mbti || '????'} &bull; ${p.labyrinthClass || 'Unknown'}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Stress Signature</p>
+                                        <div class="flex flex-wrap gap-2">
+                                            <span class="px-2 py-1 bg-red-900/50 border border-red-500/30 rounded text-xs text-red-200">Body: ${p.stressSignature.body || 'Unknown'}</span>
+                                            <span class="px-2 py-1 bg-indigo-900/50 border border-indigo-500/30 rounded text-xs text-indigo-200">Mind: ${p.stressSignature.mind || 'Unknown'}</span>
+                                            ${p.stressSignature.custom ? `<span class="px-2 py-1 bg-slate-700 border border-slate-500 rounded text-xs text-slate-300">"${p.stressSignature.custom}"</span>` : ''}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-slate-500 uppercase tracking-widest mb-1">Reflections</p>
+                                        <ul class="list-disc pl-4 text-slate-300 space-y-1">
+                                            ${renderPain('interaction', 'Interaction')}
+                                            ${renderPain('information', 'Information')}
+                                            ${renderPain('decision', 'Decision')}
+                                            ${renderPain('orientation', 'Orientation')}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 2. The Destination (Goal) -->
+                            <div class="bg-slate-900 border border-slate-700 p-6 rounded-lg shadow-lg relative overflow-hidden flex flex-col justify-center">
+                                <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fas fa-flag-checkered text-8xl"></i></div>
+                                <div class="text-center relative z-10">
+                                    <h3 class="text-xl font-bold text-slate-400 mb-2">Your Destination</h3>
+                                    <p class="text-2xl md:text-3xl text-white font-serif italic mb-6">"${ap.goal || 'To find balance'}"</p>
+                                    
+                                    <div class="bg-slate-800 p-4 rounded text-left">
+                                        <p class="text-xs text-green-400 font-bold uppercase mb-1">Success Looks Like</p>
+                                        <p class="text-slate-300 text-sm">${ap.whatSuccessLooksLike || 'Not defined'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. The Path (Scroll Map) -->
+                        <div class="bg-amber-100/5 border-2 border-amber-900/30 p-8 rounded-lg shadow-2xl relative">
+                            <!-- Decorative Scroll Elements -->
+                            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-amber-700/50 to-transparent"></div>
+                            <div class="absolute bottom-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-amber-700/50 to-transparent"></div>
+                            
+                            <h3 class="text-3xl font-bold text-amber-500 text-center mb-8 font-serif">Your Action Plan</h3>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                
+                                <!-- Column 1 -->
+                                <div class="space-y-8">
+                                    <div>
+                                        <h4 class="flex items-center gap-2 text-lg font-bold text-sky-300 mb-3">
+                                            <i class="fas fa-shield-alt"></i> Lessening the Load
+                                        </h4>
+                                        <ul class="list-disc pl-5 space-y-2 text-slate-300">
+                                            ${renderList(ap.lessenCauses, 'No actions listed.')}
+                                        </ul>
+                                    </div>
+                                    
+                                    <div>
+                                        <h4 class="flex items-center gap-2 text-lg font-bold text-purple-300 mb-3">
+                                            <i class="fas fa-water"></i> Coping with the Uncontrollable
+                                        </h4>
+                                        <ul class="list-disc pl-5 space-y-2 text-slate-300">
+                                            ${renderList(ap.copeWithUncontrollable, 'No coping mechanisms listed.')}
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <!-- Column 2 -->
+                                <div class="space-y-8">
+                                    <div>
+                                        <h4 class="flex items-center gap-2 text-lg font-bold text-rose-300 mb-3">
+                                            <i class="fas fa-heart"></i> The Foundation (Self-Care)
+                                        </h4>
+                                        <ul class="list-disc pl-5 space-y-2 text-slate-300">
+                                            ${renderList(ap.selfCare, 'No self-care listed.')}
+                                        </ul>
+                                    </div>
+
+                                    <div>
+                                        <h4 class="flex items-center gap-2 text-lg font-bold text-emerald-300 mb-3">
+                                            <i class="fas fa-hands-helping"></i> Support & Timeline
+                                        </h4>
+                                        <div class="text-slate-300 space-y-3">
+                                            <p><span class="text-slate-500 text-xs uppercase block">Assistance:</span> ${ap.assistanceNeeded || 'None'}</p>
+                                            <p><span class="text-slate-500 text-xs uppercase block">Timeline:</span> ${ap.timeline || 'Open-ended'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Footer / Controls -->
+                        <div class="text-center pt-8 border-t border-slate-800 flex flex-col items-center gap-4">
+                            <p class="text-slate-500 text-sm">
+                                Journey Completed: ${new Date(globalState.systemFlags.timestampCompleted).toLocaleString()} <br>
+                                Insight Tokens Collected: <span class="text-yellow-500">${p.insightTokens}</span>
+                            </p>
+                            
+                            <div class="flex gap-4">
+                                <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-3 rounded shadow transition-all">
+                                    <i class="fas fa-print mr-2"></i> Print Map
+                                </button>
+                                <button onclick="Scenes.end.restart()" class="bg-sky-700 hover:bg-sky-600 text-white px-8 py-3 rounded shadow transition-all font-bold">
+                                    <i class="fas fa-undo mr-2"></i> Return to Start
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                    `;
+                },
+                
+                restart: () => {
+                    if(confirm("Are you sure you want to return to the start? Unsaved progress will be lost.")) {
+                        resetState();
+                        renderStartMenu();
+                    }
+                }
+            }
+        };
+
+        function updateDebugPanel() {
+            document.getElementById('debug-content').textContent = JSON.stringify(globalState, null, 2);
+        }
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.altKey && e.key === 'd') {
+                document.getElementById('debug-panel').classList.toggle('translate-x-full');
+            }
+        });
+
+        window.onload = () => {
+            if (!globalState.player) resetState(); 
+            renderStartMenu();
+            updateDebugPanel();
+        };
+
+    </script>
+</body>
+</html>
